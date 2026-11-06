@@ -1,4 +1,4 @@
-# Panda TV — official update channel
+#  official update channel
 
 This public repository distributes Panda TV update metadata and verified Android APK releases. Panda TV source code, account credentials, playlists, and signing keys are not published here.
 
