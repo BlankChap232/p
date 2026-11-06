@@ -1,1 +1,1 @@
-# Panda Updates
+# Updates
