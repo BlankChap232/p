@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Panda TV - Official downloads</title>
+<style>
+body{margin:0;background:#050408;color:#fff;font:16px system-ui,Arial,sans-serif}
+main{max-width:620px;margin:7vh auto;padding:25px}
+article{padding:28px;background:#170D23;border:2px solid #9954DB;border-radius:22px}
+h1{color:#F035BF}a{color:#00E3CE}.muted{color:#BEB8C6}
+</style>
+</head>
+<body><main><article>
+<h1>Panda TV</h1>
+<p>Official Panda TV updates. Streaming remains with your authorized provider.</p>
+<p id="version" class="muted">Checking the latest release...</p>
+<p><a id="download" href="https://github.com/BlankChap232/p/releases/latest" rel="noopener noreferrer">Visit latest GitHub release</a></p>
+<p>Android asks you to approve installation. Only install releases signed by a publisher you trust.</p>
+<p class="muted">This site does not collect provider details or streaming activity.</p>
+</article></main>
+<script>
+fetch('version.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(m=>{
+  if(!m||!m.published){
+    document.getElementById('version').textContent='Public release not published yet.';
+    return;
+  }
+  document.getElementById('version').textContent='Latest Panda TV: '+String(m.versionName||'');
+  if(typeof m.apkUrl==='string'&&m.apkUrl.startsWith('https://github.com/')){
+    document.getElementById('download').href=m.apkUrl;
+  }
+}).catch(()=>document.getElementById('version').textContent='Release information temporarily unavailable.');
+</script></body></html>

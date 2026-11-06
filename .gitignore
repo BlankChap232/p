@@ -1,0 +1,6 @@
+*.apk
+*.keystore
+*.jks
+*secret*
+*.log
+__pycache__/
