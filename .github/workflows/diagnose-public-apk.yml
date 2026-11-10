@@ -1,0 +1,45 @@
+name: Diagnose public PandaTV APK installability
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-public-apk.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download published APK and identify file
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download v1.8.7-tv-tablet-test.1 --repo "${{ github.repository }}" --pattern 'PandaTV.apk' --dir .
+          ls -l PandaTV.apk
+          file PandaTV.apk
+          sha256sum PandaTV.apk
+          test "$(sha256sum PandaTV.apk | cut -d' ' -f1)" = "9c8da985ddd18962f6c9315ad3e0b10c9ed53ecd6f69072d9e493b4a54920f25"
+      - name: Android manifest and package metadata
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          echo "Build tools: $BT"
+          "$BT/aapt" dump badging PandaTV.apk | head -n 65
+          echo "----- manifest tree -----"
+          "$BT/aapt" dump xmltree PandaTV.apk AndroidManifest.xml | head -n 100
+      - name: Verify APK signatures including Android v2 and v3
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk
+      - name: Validate alignment of native libraries and ZIP
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/zipalign" -c -P 16 -v 4 PandaTV.apk | tail -n 20
+          unzip -t PandaTV.apk | tail -n 2
