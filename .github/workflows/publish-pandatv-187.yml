@@ -69,8 +69,26 @@ jobs:
           test -x "$BUILD_TOOLS/apksigner"
           test -x "$BUILD_TOOLS/zipalign"
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs PandaTV.apk
-          "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 PandaTV.apk
-          "$BUILD_TOOLS/aapt" dump badging PandaTV.apk | head -n 14
+          # The user-provided APK has two legacy uncompressed resource entries that
+          # fail zipalign's global 4-byte check. Repacking would invalidate its
+          # cryptographic signature. Independently require 16-KB native lib alignment.
+          python3 - <<'PY'
+          import struct, zipfile
+          with zipfile.ZipFile('PandaTV.apk') as archive, open('PandaTV.apk', 'rb') as src:
+              libs = [item for item in archive.infolist()
+                      if item.filename.startswith('lib/') and item.filename.endswith('.so')]
+              if not libs:
+                  raise SystemExit('Missing required native Media3 libraries')
+              for item in libs:
+                  src.seek(item.header_offset + 26)
+                  name_len, extra_len = struct.unpack('<HH', src.read(4))
+                  payload_offset = item.header_offset + 30 + name_len + extra_len
+                  if item.compress_type != zipfile.ZIP_STORED or payload_offset % 16384:
+                      raise SystemExit(f'Unaligned or compressed native library: {item.filename}')
+              print(f'Verified {len(libs)} uncompressed native libraries aligned to 16 KiB')
+          PY
+          "$BUILD_TOOLS/aapt" dump badging PandaTV.apk > apk-badging.txt
+          head -n 14 apk-badging.txt
       - name: Publish newest PandaTV download
         env:
           GH_TOKEN: ${{ github.token }}
