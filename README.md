@@ -1,15 +1,30 @@
-#  official update channel
+# PandaTV — official installer and update channel
 
-This public repository distributes Panda TV update metadata and verified Android APK releases. Panda TV source code, account credentials, playlists, and signing keys are not published here.
+This repository holds the **public download website**, update metadata, and APK release records. It does **not** expose the private app source, streaming credentials, provider playlists, or signing keys.
 
-**Status:** No public APK release has been published yet.
+**Official installation webpage (after GitHub Pages is enabled):** https://blankchap232.github.io/p/
 
-- Update manifest: [docs/version.json](docs/version.json)
-- Release downloads (once published): [Latest Release](https://github.com/BlankChap232/p/releases/latest)
-- Optional download page: [docs/index.html](docs/index.html) (GitHub Pages may need enabling in Settings → Pages, from main /docs)
+**Current distribution status: NO APPROVED APK RELEASE.** Do not direct viewers to an old experimental PandaFix test build. The download button remains disabled until an official GitHub release contains an asset called `PandaTV.apk`.
 
-To publish: create a production-signed and QA-tested APK with the same package ID and permanent signing key; upload it to GitHub Releases; verify its publicly accessible asset URL and SHA-256 checksum; only then set docs/version.json to published=true using the publisher tool. Do not place raw APKs or secrets directly in Git history.
+- Website: [docs/index.html](docs/index.html)
+- TV/phone setup and release gate: [docs/RELEASE-CHECKLIST.md](docs/RELEASE-CHECKLIST.md)
+- Publish web page workflow: [Publish PandaTV installation page](.github/workflows/pages.yml)
+- Inspect draft release APK: [Validate PandaTV release APK](.github/workflows/validate-apk.yml)
+- Update metadata: [docs/version.json](docs/version.json)
+- Approved downloads: [Latest GitHub Release](https://github.com/BlankChap232/p/releases/latest)
 
-The updater cannot silently install sideloaded APKs; Android installation approval is required. Hosting availability is subject to GitHub's free-tier rules and usage policies.
+## One-time activation
 
-The added FFmpeg decoder in the current Panda TV source has GPLv3 compliance considerations; resolve redistribution obligations before distributing the APK publicly.
+In this repository, visit **Settings > Pages**, select **GitHub Actions** as the source, and run **Actions > Publish PandaTV installation page > Run workflow**. Confirm the public page resolves before distributing its address.
+
+## Publishing a verified APK
+
+1. Build and production-sign from trusted Android source using the correct application ID and update signing key.
+2. Test installing and using it on real Google TV, Android TV, phone and tablet devices.
+3. Create a **draft** release and attach the exact file `PandaTV.apk`.
+4. Run **Actions > Validate PandaTV release APK** using the draft tag. Review certificate, package, ZIP alignment and SHA-256.
+5. Once all checks and real-device tests pass, **publish** the release. The installer webpage will then enable its APK download button.
+
+Android always requests approval for side-loaded installs. No site or updater can legitimately bypass Google TV's security prompts. If Google Play Protect flags an APK as harmful, investigate the warning rather than bypassing it.
+
+**Licensing:** Prior work included FFmpeg decoder components. Review source and binary redistribution obligations (including GPLv3 where applicable) before publishing.
