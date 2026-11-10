@@ -1,0 +1,99 @@
+name: Publish Panda TV 1.8.7 corrected-label APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-pandatv-namefix.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish-corrected-apk:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact release patch
+        uses: actions/checkout@v4
+      - name: Download published 1.8.7 base APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p previous
+          gh release download 'v1.8.7-tv-tablet-test.1' --repo "$REPO" --pattern 'PandaTV.apk' --dir previous
+          echo '9c8da985ddd18962f6c9315ad3e0b10c9ed53ecd6f69072d9e493b4a54920f25  previous/PandaTV.apk' | sha256sum --check -
+      - name: Reconstruct exact signed Panda TV corrected-label APK
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, struct, zlib
+          old=pathlib.Path('previous/PandaTV.apk').read_bytes()
+          encoded=pathlib.Path('release-patches/v1.8.7-panda-name-fix.delta.b64').read_text().strip()
+          delta=zlib.decompress(base64.b64decode(encoded,validate=True))
+          if delta[:8]!=b'PANDAD2\\x00':
+              raise SystemExit('Unknown patch format')
+          count,=struct.unpack_from('<I',delta,8)
+          if count>10000:raise SystemExit('Too many patch operations')
+          position=12
+          out=bytearray()
+          for _ in range(count):
+              kind=delta[position];position+=1
+              if kind==0:
+                  offset,length=struct.unpack_from('<II',delta,position);position+=8
+                  if offset+length>len(old):raise SystemExit('Patch refers outside original APK')
+                  out.extend(old[offset:offset+length])
+              elif kind==1:
+                  length,=struct.unpack_from('<I',delta,position);position+=4
+                  if position+length>len(delta):raise SystemExit('Patch data truncated')
+                  out.extend(delta[position:position+length]);position+=length
+              else:raise SystemExit('Invalid patch operation')
+          if position!=len(delta):raise SystemExit('Trailing patch data')
+          expected='e1574f16663388deb0e988cb8aeac54b9294d192c0af07bba93bc70fa831318c'
+          actual=hashlib.sha256(out).hexdigest()
+          if actual!=expected:raise SystemExit('Signed APK hash mismatch: '+actual)
+          pathlib.Path('PandaTV.apk').write_bytes(out)
+          print('Verified exact signed Panda TV 1.8.7 APK',len(out),'bytes SHA256',actual)
+          PY
+      - name: Verify package identity, app name, cryptographic signatures, ZIP and alignment
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$BT/apksigner" && test -x "$BT/zipalign" && test -x "$BT/aapt"
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk | tee apk-signature.txt
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' apk-signature.txt
+          "$BT/zipalign" -c -P 16 -v 4 PandaTV.apk | tail -n 6
+          unzip -t PandaTV.apk | tail -n 2
+          "$BT/aapt" dump badging PandaTV.apk | tee apk-badging.txt | head -n 12
+          grep -q "^package: name='com.pandatv.elitev301.touch187'" apk-badging.txt
+          grep -q "^application-label:'Panda TV'" apk-badging.txt
+          echo 'e1574f16663388deb0e988cb8aeac54b9294d192c0af07bba93bc70fa831318c  PandaTV.apk' | sha256sum --check -
+      - name: Publish corrected test as latest PandaTV APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: v1.8.7-panda-tv-namefix.2
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # Panda TV 1.8.7 — corrected name and installation repair (test)
+
+          This test release replaces the public website's previous 1.8.7 APK download. Android now displays the application name **Panda TV**, and the package has corrected resource-table alignment for Android 11+ and 16-KB-aligned native libraries.
+
+          **Known limitation:** Device playback / blank-screen problems have not yet been confirmed fixed. This release is provided at the app owner's request for additional testing. Do not remove an existing working installation until this build works on your device.
+
+          Package ID: `com.pandatv.elitev301.touch187`. The package uses the matching 1.8.7 test signing certificate. It is not an in-place update to the older PandaFix or original PandaTV app, which use different package IDs.
+
+          File: `PandaTV.apk` (signed, ARM/ARM64)
+          SHA-256: `e1574f16663388deb0e988cb8aeac54b9294d192c0af07bba93bc70fa831318c`
+
+          The previous releases remain in release history for rollback. No private signing key or source archive is included.
+          NOTES
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" PandaTV.apk --repo "$REPO" --clobber
+            gh release edit "$TAG" --repo "$REPO" --latest --title 'Panda TV 1.8.7 — Corrected Name & Installation (Test)' --notes-file release-notes.md
+          else
+            gh release create "$TAG" PandaTV.apk --repo "$REPO" --target main --latest --title 'Panda TV 1.8.7 — Corrected Name & Installation (Test)' --notes-file release-notes.md
+          fi
+          gh release view "$TAG" --repo "$REPO" --json tagName,isDraft,isPrerelease,assets,url
