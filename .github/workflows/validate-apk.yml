@@ -1,0 +1,53 @@
+name: Validate PandaTV release APK
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Draft or published release tag containing PandaTV.apk'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release asset (draft releases supported)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" --repo "$REPO" --pattern 'PandaTV.apk' --dir .
+          test -s PandaTV.apk
+          file PandaTV.apk
+          sha256sum PandaTV.apk | tee PandaTV.sha256
+      - name: Verify APK cryptographic signature and 16-KB alignment
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BUILD_TOOLS="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$BUILD_TOOLS/apksigner"
+          test -x "$BUILD_TOOLS/zipalign"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs PandaTV.apk | tee apk-signature.txt
+          "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 PandaTV.apk | tee apk-alignment.txt
+      - name: Verify package identity and installable manifest
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BUILD_TOOLS="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BUILD_TOOLS/aapt" dump badging PandaTV.apk | tee apk-badging.txt
+          grep -q "^package: name='com.pandatv.elitev301.media3qa'" apk-badging.txt
+          grep -q '^application-label:' apk-badging.txt
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PandaTV-release-validation
+          path: |
+            PandaTV.sha256
+            apk-signature.txt
+            apk-alignment.txt
+            apk-badging.txt
+          if-no-files-found: ignore
