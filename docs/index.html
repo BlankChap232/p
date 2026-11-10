@@ -1,33 +1,138 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Panda TV - Official downloads</title>
-<style>
-body{margin:0;background:#050408;color:#fff;font:16px system-ui,Arial,sans-serif}
-main{max-width:620px;margin:7vh auto;padding:25px}
-article{padding:28px;background:#170D23;border:2px solid #9954DB;border-radius:22px}
-h1{color:#F035BF}a{color:#00E3CE}.muted{color:#BEB8C6}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#100b1e">
+  <meta name="description" content="Official PandaTV installer and setup instructions for Google TV, Android TV, tablets and phones.">
+  <title>PandaTV | Official Android Installation</title>
+  <style>
+    :root{color-scheme:dark;--bg:#090816;--panel:#18112b;--line:#503a72;--text:#f8f5ff;--muted:#c7bbd8;--pink:#ff3ac9;--teal:#27e7dc}
+    *{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(ellipse at 85% -10%,#482064 0,transparent 44%),radial-gradient(ellipse at -15% 80%,#0f3746 0,transparent 42%),var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;min-height:100vh}
+    a{color:var(--teal)}
+    a:focus-visible,summary:focus-visible{outline:4px solid #fff;outline-offset:5px;border-radius:8px}
+    .wrap{width:min(930px,100% - 32px);margin:0 auto;padding:30px 0 65px}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:10px 0 23px;border-bottom:1px solid var(--line)}
+    .brand{font-size:1.55rem;font-weight:900;letter-spacing:.03em}
+    .brand span{color:var(--pink)}
+    .small{font-size:.9rem;color:var(--muted)}
+    h1{font-size:clamp(2.1rem,6vw,3.9rem);line-height:1.1;letter-spacing:-.04em;margin:31px 0 14px}
+    h1 span{color:var(--teal)}
+    h2{font-size:1.55rem;margin:0 0 16px}
+    p{margin:8px 0 16px}
+    .hero{max-width:740px}
+    .lead{color:#e4dbee;font-size:1.13rem}
+    .panel{background:linear-gradient(145deg,#1b1231,#151023);border:1px solid var(--line);border-radius:21px;padding:25px;margin-top:24px}
+    .status{font-weight:800;display:flex;align-items:center;gap:10px}
+    .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#ffbe61;box-shadow:0 0 15px #ffbe6166}
+    .dot.live{background:var(--teal);box-shadow:0 0 15px #27e7dc66}
+    .button{display:inline-block;padding:16px 24px;min-height:58px;border-radius:13px;background:var(--teal);color:#07151a;text-decoration:none;font-weight:900;text-align:center;margin:6px 0;max-width:100%;overflow-wrap:anywhere}
+    .button[aria-disabled="true"]{background:#4c425b;color:#ddd3e7;pointer-events:none}
+    .button.alt{background:transparent;border:1px solid var(--line);color:var(--text)}
+    .details{margin-top:11px;color:var(--muted);font-size:.96rem}
+    .guide{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+    .guide section{border:1px solid #493365;background:#110d1f;border-radius:16px;padding:18px}
+    .guide h3{font-size:1.1rem;margin:0 0 7px;color:var(--teal)}
+    ol{margin:7px 0 0;padding-left:24px}
+    li{margin:0 0 10px;padding-left:3px}
+    .note{border-left:4px solid var(--pink);padding:9px 12px;color:#e9dfef;background:#25172e;border-radius:0 9px 9px 0}
+    details{padding:14px 2px;border-bottom:1px solid #43355d}
+    summary{cursor:pointer;font-weight:700}
+    footer{color:var(--muted);font-size:.85rem;padding-top:30px}
+    @media(max-width:650px){.guide{grid-template-columns:1fr}.panel{padding:20px}.wrap{width:min(100% - 24px,930px)}}
+    @media(prefers-reduced-motion:no-preference){.button{transition:filter .15s ease}.button:hover{filter:brightness(1.1)}}
+  </style>
 </head>
-<body><main><article>
-<h1>Panda TV</h1>
-<p>Official Panda TV updates. Streaming remains with your authorized provider.</p>
-<p id="version" class="muted">Checking the latest release...</p>
-<p><a id="download" href="https://github.com/BlankChap232/p/releases/latest" rel="noopener noreferrer">Visit latest GitHub release</a></p>
-<p>Android asks you to approve installation. Only install releases signed by a publisher you trust.</p>
-<p class="muted">This site does not collect provider details or streaming activity.</p>
-</article></main>
-<script>
-fetch('version.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(m=>{
-  if(!m||!m.published){
-    document.getElementById('version').textContent='Public release not published yet.';
-    return;
-  }
-  document.getElementById('version').textContent='Latest Panda TV: '+String(m.versionName||'');
-  if(typeof m.apkUrl==='string'&&m.apkUrl.startsWith('https://github.com/')){
-    document.getElementById('download').href=m.apkUrl;
-  }
-}).catch(()=>document.getElementById('version').textContent='Release information temporarily unavailable.');
-</script></body></html>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">🐼 PANDA<span>TV</span></div>
+      <div class="small">Official installation &amp; updates</div>
+    </header>
+    <main>
+      <div class="hero">
+        <h1>Your TV. <span>One simple install.</span></h1>
+        <p class="lead">Install PandaTV on Google TV, Android TV, Android tablets or phones. Use the same official page whenever a new verified version is published.</p>
+      </div>
+      <section class="panel" aria-labelledby="download-title">
+        <h2 id="download-title">Get PandaTV</h2>
+        <div id="status" class="status" role="status" aria-live="polite"><span class="dot" id="status-dot"></span><span id="status-text">Checking for a verified release…</span></div>
+        <p id="release-info" class="details">Only approved Android APK packages are offered here.</p>
+        <a id="download" class="button" aria-disabled="true" tabindex="-1">Download not available yet</a>
+        <p class="details">You will always approve an Android installation yourself. This site never asks for provider login information.</p>
+        <p><a class="small" href="https://github.com/BlankChap232/p/releases" rel="noopener noreferrer">Release history and publisher information</a></p>
+      </section>
+      <section class="panel" aria-labelledby="how-title">
+        <h2 id="how-title">Installation instructions</h2>
+        <div class="guide">
+          <section>
+            <h3>📺 Google TV / Android TV</h3>
+            <ol>
+              <li>Open the Play Store and search for <strong>Downloader by AFTVnews</strong>.</li>
+              <li>Open Downloader and enter this page address (shown in your browser's address bar).</li>
+              <li>Choose <strong>Download APK</strong> above when a verified release is available.</li>
+              <li>Follow Android's request to allow installation from Downloader, then choose Install.</li>
+            </ol>
+          </section>
+          <section>
+            <h3>📱 Android phone / tablet</h3>
+            <ol>
+              <li>Open this same page in Chrome or another browser.</li>
+              <li>Tap <strong>Download APK</strong> after the release is published.</li>
+              <li>Open the downloaded <code>.apk</code> from Downloads.</li>
+              <li>Approve installation when Android asks.</li>
+            </ol>
+          </section>
+        </div>
+        <p class="note"><strong>Keep your existing app until the new one works.</strong> An APK signed with a different publisher key might install as a separate app or be rejected as an update.</p>
+      </section>
+      <section class="panel" aria-labelledby="help-title">
+        <h2 id="help-title">Having trouble installing?</h2>
+        <details><summary>The browser saves a .bin file instead of .apk</summary><p>Check whether the download actually completed and matches the expected size. If the completed file is an APK with the wrong extension, rename only the final extension from <code>.bin</code> to <code>.apk</code>. If the download is incomplete, retry using Downloader or another browser. Never rename an unrelated file and try to install it.</p></details>
+        <details><summary>The APK downloaded but Android says “App not installed”</summary><p>That is a package installation problem, not a download problem. Check storage and supported device architecture, then capture the exact message for support. Do not uninstall your working PandaTV as a first step.</p></details>
+        <details><summary>Google Play Protect warns that the app is harmful</summary><p>Stop the installation and report the exact warning. Do not disable Play Protect to force installation. A package should be reviewed before being offered to others.</p></details>
+        <details><summary>Where is the short Downloader code?</summary><p>A short code can be issued after the public installer link and a production APK are verified. Until then, this official webpage is the permanent destination.</p></details>
+      </section>
+    </main>
+    <footer>PandaTV is a player for content you are authorized to access. No playlists or provider credentials are collected by this download page.</footer>
+  </div>
+  <script>
+    (function(){
+      'use strict';
+      var endpoint = 'https://api.github.com/repos/BlankChap232/p/releases/latest';
+      var status = document.getElementById('status-text');
+      var dot = document.getElementById('status-dot');
+      var info = document.getElementById('release-info');
+      var link = document.getElementById('download');
+      var validUrl = /^https:\/\/github\.com\/BlankChap232\/p\/releases\/download\/[^\/?#]+\/PandaTV\.apk$/i;
+      function unavailable(message){
+        status.textContent = 'No verified public APK available';
+        info.textContent = message || 'A production release has not been published yet. Please check again later.';
+      }
+      function ready(version,url,size){
+        status.textContent = 'Verified release available';
+        dot.classList.add('live');
+        info.textContent = (version ? 'Version ' + version + ' · ' : '') + (size ? (size / 1048576).toFixed(1) + ' MB · ' : '') + 'Official GitHub release';
+        link.textContent = 'Download PandaTV APK';
+        link.setAttribute('href',url);
+        link.removeAttribute('aria-disabled');
+        link.removeAttribute('tabindex');
+      }
+      function fallback(){
+        fetch('./version.json',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(m){
+          if(m && m.published === true && typeof m.apkUrl === 'string' && validUrl.test(m.apkUrl))ready(m.versionName,m.apkUrl,m.sizeBytes);
+          else unavailable('A production release has not been published yet. Please check again later.');
+        }).catch(function(){unavailable('Release information is temporarily unavailable. Check GitHub release history above.');});
+      }
+      fetch(endpoint,{cache:'no-store',headers:{'Accept':'application/vnd.github+json'}})
+        .then(function(r){if(!r.ok)throw new Error('release unavailable');return r.json()})
+        .then(function(data){
+          var asset = data && Array.isArray(data.assets) ? data.assets.find(function(a){return a.name === 'PandaTV.apk' && validUrl.test(a.browser_download_url || '') && a.state === 'uploaded'}) : null;
+          if(!data || data.draft || data.prerelease || !asset){unavailable('No approved PandaTV.apk asset is published yet.');return;}
+          ready(data.tag_name,asset.browser_download_url,asset.size);
+        }).catch(fallback);
+    })();
+  </script>
+</body>
+</html>
