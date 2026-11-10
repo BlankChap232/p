@@ -1,0 +1,102 @@
+name: Publish PandaTV 1.8.7 Android test APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-pandatv-187.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  replace-download:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release patch
+        uses: actions/checkout@v4
+      - name: Retrieve the published PandaTV APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p old
+          gh release download 'v1.8.6-touchfix.1' --repo "$REPO" --pattern 'PandaTV.apk' --dir old
+          echo 'db0ff6c0ecab4ba9fb5654705ed18dc14322a839ab06dbb617624a9b4c27be1f  old/PandaTV.apk' | sha256sum --check -
+      - name: Apply exact signed-binary patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, struct, zlib
+          old = Path('old/PandaTV.apk').read_bytes()
+          b64 = Path('release-patches/v1.8.7-panda.delta.b64').read_text().strip()
+          delta = zlib.decompress(base64.b64decode(b64, validate=True))
+          if not delta.startswith(b'PANDAD2\x00'):
+              raise SystemExit('Unrecognized release patch')
+          pos = 8
+          (count,) = struct.unpack_from('<I', delta, pos)
+          pos += 4
+          new = bytearray()
+          for _ in range(count):
+              kind = delta[pos]
+              pos += 1
+              if kind == 0:
+                  offset, length = struct.unpack_from('<II', delta, pos)
+                  pos += 8
+                  assert offset + length <= len(old)
+                  new += old[offset:offset+length]
+              elif kind == 1:
+                  (length,) = struct.unpack_from('<I', delta, pos)
+                  pos += 4
+                  assert pos + length <= len(delta)
+                  new += delta[pos:pos+length]
+                  pos += length
+              else:
+                  raise SystemExit('Invalid patch operation')
+          assert pos == len(delta), 'Unconsumed patch data'
+          expected = '9c8da985ddd18962f6c9315ad3e0b10c9ed53ecd6f69072d9e493b4a54920f25'
+          actual = hashlib.sha256(new).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'Reconstructed APK hash mismatch: {actual}')
+          Path('PandaTV.apk').write_bytes(new)
+          print(f'Reconstructed exact user-provided PandaTV 1.8.7 APK: {len(new)} bytes, sha256={actual}')
+          PY
+      - name: Verify signed APK and native library alignment
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BUILD_TOOLS="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$BUILD_TOOLS/apksigner"
+          test -x "$BUILD_TOOLS/zipalign"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs PandaTV.apk
+          "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 PandaTV.apk
+          "$BUILD_TOOLS/aapt" dump badging PandaTV.apk | head -n 14
+      - name: Publish newest PandaTV download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: 'v1.8.7-tv-tablet-test.1'
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # PandaTV+ 1.8.7 — TV and Tablet Navigation Test
+
+          This is the exact user-provided, signed 1.8.7 test APK, replacing 1.8.6 as the newest download offered by the PandaTV installation website and Downloader code 9584200.
+
+          **Important installation difference:** This test build installs as PandaTV+, with a separate application ID and signing certificate. It does not update the old PandaFix/PandaTV installation in place. Keep your existing app until the new one works.
+
+          Changes included: eight bottom navigation tabs kept accessible, improved TV remote/touch scrolling and focus, and an earlier native Media3 player implementation restored to investigate blank-screen playback. Native playback and Android navigation-bar behavior still need device verification. It includes no private source archive, signing key, or credentials.
+
+          Device target: ARM / ARM64 Android TV and tablets.
+          Download filename: PandaTV.apk.
+          SHA-256: 9c8da985ddd18962f6c9315ad3e0b10c9ed53ecd6f69072d9e493b4a54920f25.
+
+          This test release is not yet a production-signed in-place update to existing installations.
+          NOTES
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" PandaTV.apk --repo "$REPO" --clobber
+            gh release edit "$TAG" --repo "$REPO" --title 'PandaTV+ 1.8.7 — TV & Tablet Test' --notes-file release-notes.md --latest
+          else
+            gh release create "$TAG" PandaTV.apk --repo "$REPO" --target main --title 'PandaTV+ 1.8.7 — TV & Tablet Test' --notes-file release-notes.md --latest
+          fi
+          gh release view "$TAG" --repo "$REPO" --json tagName,isDraft,isPrerelease,assets,url
