@@ -31,6 +31,11 @@ jobs:
           test -x "$BUILD_TOOLS/apksigner"
           test -x "$BUILD_TOOLS/zipalign"
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs PandaTV.apk | tee apk-signature.txt
+          # Reject prior debug and experimental identities even if their cryptographic signatures are valid.
+          if grep -Eiq 'Signer #[0-9]+ certificate DN:.*(Android Debug|PandaFix experimental|test keystore)' apk-signature.txt; then
+            echo "::error::Official PandaTV releases must not be signed with an Android debug or PandaFix test certificate."
+            exit 1
+          fi
           "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 PandaTV.apk | tee apk-alignment.txt
       - name: Verify package identity and installable manifest
         run: |
