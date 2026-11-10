@@ -6,7 +6,7 @@ The installation page does **not** enable downloads while no official GitHub rel
 ## One-time GitHub Pages setup
 
 On GitHub, open Settings > Pages and choose **GitHub Actions** as the Build and deployment source.
-Then open Actions > Publish PandaTV installation page > Run workflow.
+Enabling Pages does not automatically re-run a previously failed deployment. After enabling it, trigger a fresh deployment by updating a file under `docs/` or manually starting **Actions > Publish PandaTV installation page > Run workflow**. Confirm the workflow finishes successfully before sharing the public URL.
 The URL should be opened on a phone or TV browser to confirm it is actually live.
 
 ## Production release gate (must pass before publishing)
