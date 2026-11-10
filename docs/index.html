@@ -14,6 +14,20 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="PandaTV | Official Android Installer">
   <meta name="twitter:description" content="Official PandaTV download and setup information.">
+  <script>
+    // Keep copied and displayed installer URLs free of third-party tracking tags.
+    try {
+      var cleanUrl = new URL(window.location.href);
+      var changed = false;
+      Array.from(cleanUrl.searchParams.keys()).forEach(function(key) {
+        if (key.toLowerCase().indexOf('utm_') === 0 || key.toLowerCase() === 'fbclid' || key.toLowerCase() === 'gclid') {
+          cleanUrl.searchParams.delete(key);
+          changed = true;
+        }
+      });
+      if (changed) window.history.replaceState(window.history.state, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+    } catch (ignored) {}
+  </script>
   <title>PandaTV | Official Android Installation</title>
   <style>
     :root{color-scheme:dark;--bg:#090816;--panel:#18112b;--line:#503a72;--text:#f8f5ff;--muted:#c7bbd8;--pink:#ff3ac9;--teal:#27e7dc}
