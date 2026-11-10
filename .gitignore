@@ -1,6 +1,29 @@
+# This is a PUBLIC website/release-metadata repository.
+# Do not commit private PandaTV source, signing materials, development builds,
+# encrypted source backups, provider credentials, or local build output.
 *.apk
+*.aab
+*.apks
+*.zip
+*.7z
+*.gpg
 *.keystore
 *.jks
+*.p12
+*.pfx
+*.pem
+*.key
+*.env
+.env.*
 *secret*
+*credentials*
+*password*
 *.log
+**/build/
+**/.gradle/
+**/local.properties
+**/gradle.properties
+**/private/
+**/source/
+**/src/
 __pycache__/
