@@ -1,0 +1,44 @@
+name: Prepare PandaTV Android TV release draft
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/prepare-android-release.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  create-draft:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create owner-tested PandaTV release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: v1.8.6-touchfix.1
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists; not overwriting it."
+            exit 0
+          fi
+          cat > "$RUNNER_TEMP/PandaTV-release-notes.md" <<'RELEASE_NOTES'
+          # PandaTV Android TV — owner-tested preview
+
+          This preview contains the immersive navigation repair build that the app owner reported successfully installed and used on Google TV.
+
+          Important: Android shows the app name **PandaFix**, application ID `com.pandatv.elitev301.touchfix`, and version `1.8.6-rehost`. This installs separately from the original PandaTV app.
+
+          The APK uses an experimental signing identity. It is not a production-signed update to the original PandaTV. Do not distribute signing keys, source ZIPs, credentials, or encrypted build archives.
+
+          **APK file name required for the official download page:** `PandaTV.apk`
+
+          **Expected SHA-256:** `db0ff6c0ecab4ba9fb5654705ed18dc14322a839ab06dbb617624a9b4c27be1f`
+
+          Ensure the uploaded file matches the checksum before publishing. The transparent buffering-arm source patch is not included in this APK.
+          RELEASE_NOTES
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --draft --title 'PandaTV Android TV — Owner-Tested Preview 1.8.6' \
+            --notes-file "$RUNNER_TEMP/PandaTV-release-notes.md" \
+            --target main
+          echo "Release draft created. Upload PandaTV.apk and review before publication."
