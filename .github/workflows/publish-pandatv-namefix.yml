@@ -31,7 +31,7 @@ jobs:
           old=pathlib.Path('previous/PandaTV.apk').read_bytes()
           encoded=pathlib.Path('release-patches/v1.8.7-panda-name-fix.delta.b64').read_text().strip()
           delta=zlib.decompress(base64.b64decode(encoded,validate=True))
-          if delta[:8]!=b'PANDAD2\\x00':
+          if delta[:8]!=bytes.fromhex('50414e4441443200'):
               raise SystemExit('Unknown patch format')
           count,=struct.unpack_from('<I',delta,8)
           if count>10000:raise SystemExit('Too many patch operations')
