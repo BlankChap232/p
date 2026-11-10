@@ -162,8 +162,14 @@
       fetch(endpoint,{cache:'no-store',headers:{'Accept':'application/vnd.github+json'}})
         .then(function(r){if(!r.ok)throw new Error('release unavailable');return r.json()})
         .then(function(data){
-          if(data && data.tag_name === withdrawnVersion){ showTemporaryFallback(); return; }
           var asset = data && Array.isArray(data.assets) ? data.assets.find(function(a){return a.name === 'PandaTV.apk' && validUrl.test(a.browser_download_url || '') && a.state === 'uploaded'}) : null;
+          // The withdrawn original 1.8.7 installer has a parsing defect. Only
+          // activate that release when its APK is replaced with the verified
+          // correctly aligned, signed Panda TV label build.
+          if(data && data.tag_name === withdrawnVersion &&
+             (!asset || asset.digest !== 'sha256:e1574f16663388deb0e988cb8aeac54b9294d192c0af07bba93bc70fa831318c')){
+            showTemporaryFallback(); return;
+          }
           if(!data || data.draft || data.prerelease || !asset){unavailable('No approved PandaTV.apk asset is published yet.');return;}
           ready(data.tag_name,asset.browser_download_url,asset.size);
         }).catch(fallback);
