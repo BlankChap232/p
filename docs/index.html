@@ -66,8 +66,8 @@
       </div>
       <section class="panel" aria-labelledby="download-title">
         <h2 id="download-title">Get PandaTV</h2>
-        <div id="status" class="status" role="status" aria-live="polite"><span class="dot" id="status-dot"></span><span id="status-text">Checking for a verified release…</span></div>
-        <p id="release-info" class="details">Only approved Android APK packages are offered here.</p>
+        <div id="status" class="status" role="status" aria-live="polite"><span class="dot" id="status-dot"></span><span id="status-text">Checking for a published PandaTV release…</span></div>
+        <p id="release-info" class="details">The download button becomes active after a public APK release is published.</p>
         <a id="download" class="button" aria-disabled="true" tabindex="-1">Download not available yet</a>
         <p class="details">You will always approve an Android installation yourself. This site never asks for provider login information.</p>
         <p><a class="small" href="https://github.com/BlankChap232/p/releases" rel="noopener noreferrer">Release history and publisher information</a></p>
@@ -116,11 +116,11 @@
       var link = document.getElementById('download');
       var validUrl = /^https:\/\/github\.com\/BlankChap232\/p\/releases\/download\/[^\/?#]+\/PandaTV\.apk$/i;
       function unavailable(message){
-        status.textContent = 'No verified public APK available';
+        status.textContent = 'No public APK available yet';
         info.textContent = message || 'A production release has not been published yet. Please check again later.';
       }
       function ready(version,url,size){
-        status.textContent = 'Verified release available';
+        status.textContent = 'Published PandaTV download available';
         dot.classList.add('live');
         info.textContent = (version ? 'Version ' + version + ' · ' : '') + (size ? (size / 1048576).toFixed(1) + ' MB · ' : '') + 'Official GitHub release';
         link.textContent = 'Download PandaTV APK';
