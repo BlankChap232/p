@@ -27,9 +27,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq zstd
           base64 -d release-patches/v1.9.0-test.zst.b64 > patch.zst
-          echo 'f359a53518c207819cc6795b58879ef45e32ba29aad198ccde36dc2209239d39  patch.zst' | sha256sum --check -
+          echo '58da9d2c6b3755e55d9a31627706b15eb18e113c741e5edfd580204d730de8a0  patch.zst' | sha256sum --check -
           zstd -d --patch-from=base/PandaTV.apk patch.zst -o PandaTV_1.9.0_TEST.apk --force
-          echo '197d20d2806bda60fea60d2a86d0f3d8493ae506e5d2d16710516f0e1e12cdd6  PandaTV_1.9.0_TEST.apk' | sha256sum --check -
+          echo '090575a5af7e995ec1b274ce9c5eb68ee50e4500700f4fcb04e4de1231e14b24  PandaTV_1.9.0_TEST.apk' | sha256sum --check -
       - name: Verify with Android official build tools
         run: |
           set -euo pipefail
