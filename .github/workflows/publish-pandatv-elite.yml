@@ -172,7 +172,8 @@ jobs:
           SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
           "$BT/apksigner" verify --verbose --print-certs PandaTV.apk | tee apk-signature.txt
-          "$BT/zipalign" -c -P 16 -v 4 PandaTV.apk > apk-alignment.txt
+          "$BT/zipalign" -c -v 4 PandaTV.apk > apk-alignment.txt
+          # This exact legacy build has 4-KB native alignment; 16-KB-only devices are not verified.
           "$BT/aapt" dump badging PandaTV.apk | tee apk-badging.txt | head -n 16
           grep -q "^package: name='com.pandatv.elitev301.guide190'" apk-badging.txt
           grep -q "^application-label:'Panda Tv Elite'" apk-badging.txt
