@@ -1,0 +1,80 @@
+name: Verify Panda TV 1.9.2 single-menu test APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-pandatv-192.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Obtain known public base APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p base
+          gh release download v1.9.0-epg-navigation.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir base
+          echo '090575a5af7e995ec1b274ce9c5eb68ee50e4500700f4fcb04e4de1231e14b24  base/PandaTV.apk' | sha256sum -c -
+      - name: Reconstruct exact signed 1.9.2 test APK
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd
+          base64 -d release-patches/v1.9.2-single-nav-test.zst.b64 > patch.zst
+          echo '2c14d8462fb1019e12a281b22a85cdd4e1bd77e280dfbea03b3da69e552ab391  patch.zst' | sha256sum -c -
+          zstd -d --patch-from=base/PandaTV.apk patch.zst -o PandaTV_1.9.2_Single_Menu_TEST.apk --force
+          echo '902b048836bab7587804fed4727912d37faa1966c76288b511af1eac6eff18d7  PandaTV_1.9.2_Single_Menu_TEST.apk' | sha256sum -c -
+      - name: Verify APK cryptography and 16 KiB resource alignment
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/apksigner" verify --verbose --print-certs PandaTV_1.9.2_Single_Menu_TEST.apk | tee signature.txt
+          "$BT/apksigner" verify --verbose --print-certs base/PandaTV.apk > base-signature.txt
+          grep -m1 '^V2 Signer: certificate SHA-256 digest:' signature.txt > signer.txt
+          grep -m1 '^V2 Signer: certificate SHA-256 digest:' base-signature.txt > base-signer.txt
+          diff -u base-signer.txt signer.txt
+          "$BT/zipalign" -c -P 16 -v 4 PandaTV_1.9.2_Single_Menu_TEST.apk > alignment.txt
+          tail -n 4 alignment.txt
+          "$BT/aapt" dump badging PandaTV_1.9.2_Single_Menu_TEST.apk > badging.txt
+          grep -q "^package: name='com.pandatv.elitev301.touch187'" badging.txt
+      - name: Verify native player and EPG unchanged
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import zipfile,hashlib
+          base=zipfile.ZipFile('base/PandaTV.apk')
+          new=zipfile.ZipFile('PandaTV_1.9.2_Single_Menu_TEST.apk')
+          assert new.testzip() is None
+          old=set(base.namelist());updated=set(new.namelist())
+          added={'assets/pandatv_v191_guide_consumer.css','assets/pandatv_v192_single_nav.css','assets/pandatv_v192_single_nav.js'}
+          changed={'assets/pandatv.html','assets/pandatv_v1888_guide_nav.js','assets/pandatv_v2959_grid.js'}
+          assert updated-old==added,updated-old
+          assert old-updated==set(),old-updated
+          for n in old:
+              if n.startswith('META-INF/') and (n=='META-INF/MANIFEST.MF' or n.endswith(('.SF','.RSA','.DSA','.EC'))):continue
+              if n in changed:continue
+              assert base.read(n)==new.read(n),n
+          for n in changed:assert base.read(n)!=new.read(n),n
+          print('Verified exactly 3 modified WebView files and 3 added style/navigation assets, native Media3 and EPG data unchanged.')
+          PY
+          for JS in pandatv_v1888_guide_nav.js pandatv_v192_single_nav.js pandatv_v2959_grid.js; do
+            unzip -p PandaTV_1.9.2_Single_Menu_TEST.apk "assets/$JS" | node --check
+          done
+      - name: Make independently verified APK available for owner testing
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PandaTV-1.9.2-Signed-Menu-Test
+          path: |
+            PandaTV_1.9.2_Single_Menu_TEST.apk
+            signature.txt
+            alignment.txt
+            badging.txt
+          retention-days: 14
