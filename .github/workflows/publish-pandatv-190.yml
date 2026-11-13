@@ -1,0 +1,87 @@
+name: Publish Panda TV 1.9.0 EPG and navigation repair
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-pandatv-190.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout verified release patch
+        uses: actions/checkout@v4
+      - name: Download public 1.8.9 signed base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p base
+          gh release download v1.8.9-epg-stability.1 --repo "$GITHUB_REPOSITORY" --pattern 'PandaTV.apk' --dir base
+          echo 'e7bc25cd0915de1e35c2d446a10c764e313d93bbc496188ab7a1c54535fb3404  base/PandaTV.apk' | sha256sum --check -
+      - name: Reconstruct exact owner-tested 1.9.0 APK
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd
+          base64 -d release-patches/v1.9.0-test.zst.b64 > patch.zst
+          echo '58da9d2c6b3755e55d9a31627706b15eb18e113c741e5edfd580204d730de8a0  patch.zst' | sha256sum --check -
+          zstd -d --patch-from=base/PandaTV.apk patch.zst -o PandaTV.apk --force
+          echo '090575a5af7e995ec1b274ce9c5eb68ee50e4500700f4fcb04e4de1231e14b24  PandaTV.apk' | sha256sum --check -
+      - name: Verify signature, signer identity, APK alignment, and guide assets
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk | tee apk-signature.txt
+          "$BT/apksigner" verify --verbose --print-certs base/PandaTV.apk > base-signature.txt
+          grep 'Signer #1 certificate SHA-256 digest:' apk-signature.txt > current-cert.txt
+          grep 'Signer #1 certificate SHA-256 digest:' base-signature.txt > base-cert.txt
+          diff -u base-cert.txt current-cert.txt
+          "$BT/zipalign" -c -P 16 -v 4 PandaTV.apk | tail -n 10
+          "$BT/aapt" dump badging PandaTV.apk | tee apk-badging.txt | head -n 15
+          grep -q "^package: name='com.pandatv.elitev301.touch187'" apk-badging.txt
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          expected = [
+            'assets/epg_genie_pandatv.js', 'assets/epg_genie_primary_v12.js',
+            'assets/pandatv_v1888_epg_governor.js', 'assets/pandatv_v1888_guide_nav.js',
+            'assets/pandatv_v1888_guide_nav.css'
+          ]
+          with ZipFile('PandaTV.apk') as z:
+              assert z.testzip() is None
+              assert all(n in z.namelist() for n in expected), 'Missing EPG or navigation files'
+          print('EPG and guide navigation assets verified.')
+          PY
+      - name: Publish new latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: 'v1.9.0-epg-navigation.1'
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # Panda TV 1.9.0 — Live Guide Updates & Navigation
+
+          The owner tested this package on Android TV and confirmed it works.
+
+          - EPG Genie processes small batches in the background while navigating, rather than waiting indefinitely for idle time.
+          - Missing program listings retry sooner.
+          - Refresh EPG performs a lightweight guide update instead of launching large XMLTV downloads.
+          - Live Guide Back returns to section controls, then Home, with visible Home / Sections shortcuts.
+          - The earlier 1.8.9 guide performance fixes are retained.
+
+          This is the exact signed Android TV test APK verified by GitHub Actions. The internal Android version metadata may still display **1.8.9** even though the guide-fix release is labeled **1.9.0**. Keep the previous installer as a rollback option. The native Media3 player was not modified, and the native Favorite button is not included in this release.
+
+          SHA-256: `090575a5af7e995ec1b274ce9c5eb68ee50e4500700f4fcb04e4de1231e14b24`.
+          APK: `PandaTV.apk`.
+          NOTES
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title 'Panda TV 1.9.0 — EPG and Navigation Repair' --notes-file release-notes.md --latest
+          else
+            gh release create "$TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --target main --title 'Panda TV 1.9.0 — EPG and Navigation Repair' --notes-file release-notes.md --latest
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease,assets,url
