@@ -1,0 +1,35 @@
+name: Prepare Android 35 and Media3 compile API jars
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/prepare-media3-compile-libs.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obtain compile-time Android SDK and Media3 classpath
+        run: |
+          set -euo pipefail
+          mkdir -p jars
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if [ ! -e "$SDK/platforms/android-35/android.jar" ]; then
+            yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35"
+          fi
+          cp "$SDK/platforms/android-35/android.jar" jars/
+          for lib in common exoplayer exoplayer-hls exoplayer-dash exoplayer-rtsp ui datasource extractor decoder; do
+            name="media3-$lib"
+            url="https://dl.google.com/dl/android/maven2/androidx/media3/$name/1.9.3/$name-1.9.3.aar"
+            curl -fsSL --retry 3 "$url" -o "/tmp/$name.aar"
+            unzip -p "/tmp/$name.aar" classes.jar > "jars/$name.jar"
+            test -s "jars/$name.jar"
+          done
+          (cd jars && sha256sum *.jar > sha256sum.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PandaTV-Java-CompileClasspath-Android35-Media3-193
+          path: jars/
+          retention-days: 3
