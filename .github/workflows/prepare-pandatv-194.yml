@@ -1,0 +1,39 @@
+name: Prepare Panda TV 1.9.4 Forge public APK draft
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/prepare-pandatv-194.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  draft:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create empty release draft for exact owner-tested APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: 'v1.9.4-forge-preview.1'
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Existing draft/release will not be overwritten."
+            exit 0
+          fi
+          cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+          # Panda TV 1.9.4 — Forge Preview / Compact Menus
+
+          Owner-tested APK Forge build: removes the clipped 24/7 category strip on Home, keeps a single navigation bar and restores Home scroll-to-top. Includes the separate native Media3 live preview mode and favorites interface.
+
+          **Important installation note:** This is built from the new 1.9.4 APK Forge Gradle project and has Android application ID `com.pandatv.elitev301.forgepreview193`. It is **not an in-place update** to the 1.9.0 public app (`com.pandatv.elitev301.touch187`). It may install as a separate Panda TV app. The signing certificate is the identity used by the APK Forge service.
+
+          **Release gate:** Upload the exact APK tested on the device as an asset named `PandaTV.apk`, then run the workflow *Validate and publish Panda TV 1.9.4 owner-tested APK*. Do not upload Gradle source, signing keys, service credentials or project ZIP files here. Only the test APK should be a public asset.
+
+          This is a consumer Android TV preview; playback support may differ from the earlier private Media3/FFmpeg engine.
+          NOTES
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
+             --title 'Panda TV 1.9.4 — Forge Preview (Owner-Tested)' \
+             --notes-file "$RUNNER_TEMP/release-notes.md" --target main
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,assets,url
