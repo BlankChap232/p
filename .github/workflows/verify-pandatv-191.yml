@@ -1,0 +1,86 @@
+name: Verify Panda TV 1.9.1 compact guide test APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-pandatv-191.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact test patch
+        uses: actions/checkout@v4
+      - name: Download unchanged 1.9.0 public base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p base
+          gh release download v1.9.0-epg-navigation.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir base
+          echo '090575a5af7e995ec1b274ce9c5eb68ee50e4500700f4fcb04e4de1231e14b24  base/PandaTV.apk' | sha256sum --check -
+      - name: Reconstruct owner test APK without publishing
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd
+          base64 -d release-patches/v1.9.1-compact-guide.zst.b64 > patch.zst
+          echo '70ba4b9996a32b519399bc1be4654ffadf43f2d59d601b56c447d433c7f5c5f0  patch.zst' | sha256sum --check -
+          zstd -d --patch-from=base/PandaTV.apk patch.zst -o PandaTV_1.9.1_Compact_Guide_TEST.apk --force
+          echo '872be7151519aa367ef271e3d31c02928dee263ce72f9f92342b312a54df2912  PandaTV_1.9.1_Compact_Guide_TEST.apk' | sha256sum --check -
+      - name: Verify official Android APK signatures and 16 KiB alignment
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/apksigner" verify --verbose --print-certs PandaTV_1.9.1_Compact_Guide_TEST.apk | tee apk-signature.txt
+          "$BT/apksigner" verify --verbose --print-certs base/PandaTV.apk > base-signature.txt
+          grep -m1 '^V2 Signer: certificate SHA-256 digest:' apk-signature.txt > new-cert.txt
+          grep -m1 '^V2 Signer: certificate SHA-256 digest:' base-signature.txt > base-cert.txt
+          diff -u base-cert.txt new-cert.txt
+          "$BT/zipalign" -c -P 16 -v 4 PandaTV_1.9.1_Compact_Guide_TEST.apk > apk-alignment.txt
+          tail -n 7 apk-alignment.txt
+          "$BT/aapt" dump badging PandaTV_1.9.1_Compact_Guide_TEST.apk > apk-badging.txt
+          grep -q "^package: name='com.pandatv.elitev301.touch187'" apk-badging.txt
+          head -n 7 apk-badging.txt
+      - name: Confirm only intended app assets changed
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          from pathlib import Path
+          import hashlib, re
+          base=ZipFile('base/PandaTV.apk')
+          new=ZipFile('PandaTV_1.9.1_Compact_Guide_TEST.apk')
+          assert new.testzip() is None
+          added={'assets/pandatv_v191_guide_consumer.css'}
+          changed={'assets/pandatv.html','assets/pandatv_v2959_grid.js','assets/pandatv_v1888_guide_nav.js'}
+          bnames=set(base.namelist());nnames=set(new.namelist())
+          assert nnames-bnames==added,nnames-bnames
+          for name in bnames:
+              if re.match(r'META-INF/(MANIFEST.MF|[^/]+\\.(SF|RSA|DSA|EC))$',name,re.I):
+                  continue
+              if name in changed:continue
+              assert base.read(name)==new.read(name), f'Unexpected app content change: {name}'
+          assert all(new.read(n)!=base.read(n) for n in changed)
+          assert b'consumer guide' in new.read('assets/pandatv_v191_guide_consumer.css').lower()
+          assert b'TkNJUw==' in new.read('assets/pandatv_v2959_grid.js')
+          print('Unchanged Media3 player, native libraries, provider data and all unrelated assets.')
+          PY
+          for JS in pandatv_v2959_grid.js pandatv_v1888_guide_nav.js; do
+            unzip -p PandaTV_1.9.1_Compact_Guide_TEST.apk "assets/$JS" | node --check
+          done
+      - name: Save installer and audit for owner testing
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PandaTV-1.9.1-Compact-Guide-Signed-Test
+          path: |
+            PandaTV_1.9.1_Compact_Guide_TEST.apk
+            apk-signature.txt
+            apk-alignment.txt
+            apk-badging.txt
+          retention-days: 14
