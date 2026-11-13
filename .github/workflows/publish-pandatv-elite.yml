@@ -1,0 +1,205 @@
+name: Publish approved Panda Tv Elite APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-pandatv-elite.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download playback-proven base APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p base
+          gh release download 'v1.8.9-epg-stability.1' --repo "$GITHUB_REPOSITORY" --pattern 'PandaTV.apk' --dir base
+          echo 'e7bc25cd0915de1e35c2d446a10c764e313d93bbc496188ab7a1c54535fb3404  base/PandaTV.apk' | sha256sum -c -
+      - name: Reconstruct exact approved APK without any private signing keys
+        run: |
+          set -euo pipefail
+          cat > rebuild_elite.py <<'PY'
+          import base64, hashlib, struct, zipfile, re, zlib
+          from pathlib import Path
+          BASE=Path('base/PandaTV.apk')
+          OUTPUT=Path('PandaTV.apk')
+          SIG_DATE=(2026,11,13,20,31,56)
+          def replace_string_pool(xml,old,new):
+              data=bytearray(xml);assert data[:2]==b'\x03\x00'
+              p=8
+              while p+8<len(data):
+                  t,hs,sz=struct.unpack_from('<HHI',data,p)
+                  if t==1:
+                      cnt,styles,flags,strings,stylesoff=struct.unpack_from('<IIIII',data,p+8)
+                      assert not flags&0x100
+                      offsets=[struct.unpack_from('<I',data,p+hs+i*4)[0] for i in range(cnt)]
+                      for i,r in enumerate(offsets):
+                          at=p+strings+r
+                          length=struct.unpack_from('<H',data,at)[0]
+                          if length&0x8000:continue
+                          size=2+length*2+2
+                          if data[at+2:at+2+length*2]!=old.encode('utf-16le'):continue
+                          rep=struct.pack('<H',len(new))+new.encode('utf-16le')+b'\x00\x00'
+                          delta=len(rep)-size;assert delta%4==0
+                          data[at:at+size]=rep
+                          struct.pack_into('<I',data,p+4,sz+delta)
+                          struct.pack_into('<I',data,4,struct.unpack_from('<I',data,4)[0]+delta)
+                          for j,r2 in enumerate(offsets):
+                              if r2>r:struct.pack_into('<I',data,p+hs+j*4,r2+delta)
+                          if stylesoff:struct.pack_into('<I',data,p+24,stylesoff+delta)
+                          return bytes(data)
+                  p+=sz
+              raise ValueError('Expected launcher name not found')
+          def edit_js(name,raw,css):
+              if name=='assets/pandatv_v1888_guide_nav.css':return css
+              if name=='assets/pandatv_v1888_guide_nav.js':
+                  old=b'.p2959ChannelOpen,.p2959Program:not(.is-gap)'
+                  assert raw.count(old)==1
+                  return raw.replace(old,b'.p2959ChannelOpen,.p2959Favorite,.p2959Program:not(.is-gap)')
+              if name=='assets/pandatv_v2959_grid.js':
+                  old=b' title="${htmlEscape(title+\' \xc2\xb7 \'+range+extra)}"'
+                  assert raw.count(old)==1
+                  return raw.replace(old,b'')
+              if name=='assets/panda_program_details_v172.js':
+                  old=b'const cache=new Map();let dialog=null;'
+                  new=old[:-1]+b',dialogIdleTimer=0;\nfunction armDialogIdle(){clearTimeout(dialogIdleTimer);dialogIdleTimer=setTimeout(close,20000);}'
+                  assert raw.count(old)==1
+                  raw=raw.replace(old,new)
+                  old=b'function close(){dialog?.remove();dialog=null;}'
+                  new=b'function close(){clearTimeout(dialogIdleTimer);dialogIdleTimer=0;dialog?.remove();dialog=null;}'
+                  assert raw.count(old)==1
+                  raw=raw.replace(old,new)
+                  old=b"  dialog.querySelector('#p172Close').focus();return true;"
+                  new=(b"  dialog.addEventListener('keydown',event=>{\n"
+                      b"    if(['Escape','Backspace','BrowserBack'].includes(event.key)){\n"
+                      b"      event.preventDefault();event.stopPropagation();close();return;\n"
+                      b"    }\n"
+                      b"    armDialogIdle();\n"
+                      b"  },true);\n"
+                      b"  dialog.addEventListener('pointerdown',event=>{\n"
+                      b"    if(event.target!==dialog)armDialogIdle();\n"
+                      b"  },{passive:true});\n"
+                      b"  armDialogIdle();\n"+old)
+                  assert raw.count(old)==1
+                  return raw.replace(old,new)
+              return raw
+          def patch_manifest(mf,changes):
+              for n,data in changes.items():
+                  pat=rb'(Name: '+re.escape(n.encode())+rb'\r\nSHA-256-Digest: )[A-Za-z0-9+/=]+'
+                  digest=base64.b64encode(hashlib.sha256(data).digest())
+                  mf,count=re.subn(pat,lambda m:m.group(1)+digest,mf)
+                  assert count==1,n
+              return mf
+          def patch_signature_file(sf,mf,changes):
+              digest=base64.b64encode(hashlib.sha256(mf).digest())
+              sf,count=re.subn(rb'(SHA-256-Digest-Manifest: )[A-Za-z0-9+/=]+',lambda m:m.group(1)+digest,sf)
+              assert count==1
+              for n in changes:
+                  sec=re.search(rb'(Name: '+re.escape(n.encode())+rb'\r\nSHA-256-Digest: [A-Za-z0-9+/=]+\r\n\r\n)',mf).group(1)
+                  digest=base64.b64encode(hashlib.sha256(sec).digest())
+                  pat=rb'(Name: '+re.escape(n.encode())+rb'\r\nSHA-256-Digest: )[A-Za-z0-9+/=]+'
+                  sf,count=re.subn(pat,lambda m:m.group(1)+digest,sf)
+                  assert count==1,n
+              return sf
+          data=zlib.decompress(base64.b64decode(Path('release-patches/pandatv-elite-public-reconstruction.b64').read_text().strip()))
+          csslen,rsalen,v2len=struct.unpack_from('<III',data,0)
+          assert (csslen,rsalen,v2len)==(7264,1690,1926)
+          assert len(data)==12+csslen+rsalen+v2len
+          css=data[12:12+csslen];rsa=data[12+csslen:12+csslen+rsalen];v2=data[-v2len:]
+          assert v2.endswith(b'APK Sig Block 42')
+          with zipfile.ZipFile(BASE) as source:
+              items={n:source.read(n) for n in source.namelist() if not (n.startswith('META-INF/PANDATV1.') or n=='META-INF/MANIFEST.MF')}
+              manifest=items['AndroidManifest.xml']
+              assert manifest.count('1.8.9-tvtest'.encode('utf-16le'))==1
+              manifest=manifest.replace('1.8.9-tvtest'.encode('utf-16le'),'1.8.9-epgfix'.encode('utf-16le'))
+              assert manifest.count('com.pandatv.elitev301.touch187'.encode('utf-16le'))>=1
+              manifest=manifest.replace('com.pandatv.elitev301.touch187'.encode('utf-16le'),'com.pandatv.elitev301.guide190'.encode('utf-16le'))
+              items['AndroidManifest.xml']=replace_string_pool(manifest,'Panda TV','Panda Tv Elite')
+              changes={'AndroidManifest.xml':items['AndroidManifest.xml']}
+              for n in ('assets/panda_program_details_v172.js','assets/pandatv_v1888_guide_nav.css','assets/pandatv_v1888_guide_nav.js','assets/pandatv_v2959_grid.js'):
+                  items[n]=edit_js(n,items[n],css);changes[n]=items[n]
+              mf=patch_manifest(source.read('META-INF/MANIFEST.MF'),changes)
+              sf=patch_signature_file(source.read('META-INF/PANDATV1.SF'),mf,changes)
+              items['META-INF/MANIFEST.MF']=mf
+              items['META-INF/PANDAGUI.SF']=sf
+              items['META-INF/PANDAGUI.RSA']=rsa
+              order=[n.replace('META-INF/PANDATV1.','META-INF/PANDAGUI.') for n in source.namelist()]
+              with zipfile.ZipFile('plain.apk','w') as out:
+                  for n in order:
+                      orig=n.replace('META-INF/PANDAGUI.','META-INF/PANDATV1.')
+                      info=source.getinfo(orig)
+                      sig=n in ('META-INF/MANIFEST.MF','META-INF/PANDAGUI.SF','META-INF/PANDAGUI.RSA')
+                      zi=zipfile.ZipInfo(n,SIG_DATE if sig else info.date_time)
+                      zi.compress_type=info.compress_type
+                      zi.external_attr=info.external_attr
+                      zi.internal_attr=info.internal_attr
+                      zi.create_system=0 if sig else info.create_system
+                      zi.comment=info.comment
+                      zi.flag_bits=info.flag_bits&~8
+                      align=4096 if n.endswith('.so') and zi.compress_type==0 else 4
+                      start=out.fp.tell()
+                      pad=(-start-30-len(n.encode('utf8'))-4)%align
+                      zi.extra=struct.pack('<HH',0xd935,pad)+b'\x00'*pad
+                      out.writestr(zi,items[n],compress_type=zi.compress_type,compresslevel=6)
+          plain=Path('plain.apk').read_bytes()
+          eocd=plain.rfind(b'PK\x05\x06')
+          cd,=struct.unpack_from('<I',plain,eocd+16)
+          neweocd=bytearray(plain[eocd:]);struct.pack_into('<I',neweocd,16,cd+len(v2))
+          OUTPUT.write_bytes(plain[:cd]+v2+plain[cd:eocd]+neweocd)
+          expected='18e330f4110b4117f76223a936daf16de14e8e2fc2ab9a39fca5ca040cf054a8'
+          actual=hashlib.sha256(OUTPUT.read_bytes()).hexdigest()
+          assert actual==expected,f'APK mismatch {actual}'
+          assert OUTPUT.stat().st_size==25429186
+          with zipfile.ZipFile(OUTPUT) as z:
+              assert z.testzip() is None
+              assert 'Panda Tv Elite'.encode('utf-16le') in z.read('AndroidManifest.xml')
+              with zipfile.ZipFile(BASE) as base:
+                  for n in base.namelist():
+                      if n.endswith('.dex') or n.endswith('.so'):
+                          assert base.read(n)==z.read(n),f'Playback file modified: {n}'
+          print('Exact approved Panda Tv Elite APK verified',actual)
+          PY
+          python3 rebuild_elite.py
+      - name: Verify signature, name, package and native alignment
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk | tee apk-signature.txt
+          "$BT/zipalign" -c -P 16 -v 4 PandaTV.apk > apk-alignment.txt
+          "$BT/aapt" dump badging PandaTV.apk | tee apk-badging.txt | head -n 16
+          grep -q "^package: name='com.pandatv.elitev301.guide190'" apk-badging.txt
+          grep -q "^application-label:'Panda Tv Elite'" apk-badging.txt
+      - name: Publish exact approved APK as latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v1.8.9-elite-compact-guide.1
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # Panda Tv Elite — approved compact guide build
+          
+          Owner-approved Panda 90 compact-guide fix, with Android launcher label changed to **Panda Tv Elite**.
+          
+          - Playback engine and all 5 DEX and 10 native FFmpeg/Media3 decoder libraries preserved from the working v1.8.9 build.
+          - Compact, readable guide header; no preview player.
+          - Guide program cards no longer cover channel names and numbers.
+          - Remote navigation includes Watch and Favorite; guide details close on Back/Escape or inactivity.
+          
+          This is the exact owner-approved APK, rebuilt from public v1.8.9 release assets without distributing any private signing keys. APK SHA-256: `18e330f4110b4117f76223a936daf16de14e8e2fc2ab9a39fca5ca040cf054a8`.
+          
+          **Install identity:** `com.pandatv.elitev301.guide190`. This is a separately signed package and is not an in-place update to older Panda TV installations. Keep any working previous version until the new install is confirmed.
+          NOTES
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest --title 'Panda Tv Elite — Approved Compact Guide' --notes-file release-notes.md
+          else
+            gh release create "$TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --target main --latest --title 'Panda Tv Elite — Approved Compact Guide' --notes-file release-notes.md
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease,assets,url
