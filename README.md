@@ -4,7 +4,7 @@ This repository holds the **public download website**, update metadata, and APK 
 
 **Official installation webpage (after GitHub Pages is enabled):** https://blankchap232.github.io/p/
 
-**Current distribution status: NO APPROVED APK RELEASE.** Do not direct viewers to an old experimental PandaFix test build. The download button remains disabled until an official GitHub release contains an asset called `PandaTV.apk`.
+**Current distribution status: Panda Tv Elite approved public APK is live.** The latest release contains the verified `PandaTV.apk` installer with the owner-approved compact guide, preserved working v1.8.9 playback engine, and Android launcher label `Panda Tv Elite`. It installs separately from older package identities.
 
 - Website: [docs/index.html](docs/index.html)
 - TV/phone setup and release gate: [docs/RELEASE-CHECKLIST.md](docs/RELEASE-CHECKLIST.md)
