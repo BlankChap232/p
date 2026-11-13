@@ -38,8 +38,8 @@ jobs:
           BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
           "$BT/apksigner" verify --verbose --print-certs PandaTV.apk | tee apk-signature.txt
           "$BT/apksigner" verify --verbose --print-certs base/PandaTV.apk > base-signature.txt
-          grep 'Signer #1 certificate SHA-256 digest:' apk-signature.txt > current-cert.txt
-          grep 'Signer #1 certificate SHA-256 digest:' base-signature.txt > base-cert.txt
+          grep -m1 '^V2 Signer: certificate SHA-256 digest:' apk-signature.txt > current-cert.txt
+          grep -m1 '^V2 Signer: certificate SHA-256 digest:' base-signature.txt > base-cert.txt
           diff -u base-cert.txt current-cert.txt
           "$BT/zipalign" -c -P 16 -v 4 PandaTV.apk | tail -n 10
           "$BT/aapt" dump badging PandaTV.apk | tee apk-badging.txt | head -n 15
