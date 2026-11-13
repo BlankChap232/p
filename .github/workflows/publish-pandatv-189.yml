@@ -1,0 +1,82 @@
+name: Publish Panda TV 1.8.9 EPG stability release
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-pandatv-189.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout verified patch
+        uses: actions/checkout@v4
+      - name: Download exact 1.8.7 release base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p base
+          gh release download 'v1.8.7-panda-tv-namefix.2' --repo "$GITHUB_REPOSITORY" --pattern 'PandaTV.apk' --dir base
+          echo 'e1574f16663388deb0e988cb8aeac54b9294d192c0af07bba93bc70fa831318c  base/PandaTV.apk' | sha256sum --check -
+      - name: Reconstruct exact signed 1.8.9 APK
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd
+          base64 --decode release-patches/v1.8.9-epg-stability.zst.b64 > pandatv-189.patch.zst
+          echo 'c6faab95bc2bbd2ce3746b5d2a31a60f6cd740aa5cb8d583921358cda1a7d602  pandatv-189.patch.zst' | sha256sum --check -
+          zstd -d --patch-from=base/PandaTV.apk pandatv-189.patch.zst -o PandaTV.apk
+          echo 'e7bc25cd0915de1e35c2d446a10c764e313d93bbc496188ab7a1c54535fb3404  PandaTV.apk' | sha256sum --check -
+      - name: Check APK signature, resources, and package
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk | tee apk-signature.txt
+          "$BT/zipalign" -c -P 16 -v 4 PandaTV.apk | tail -n 12
+          "$BT/aapt" dump badging PandaTV.apk | tee apk-badging.txt | head -n 15
+          grep -q "versionName='1.8.9" apk-badging.txt
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile("PandaTV.apk") as z:
+              assert z.testzip() is None
+              needed = ("assets/epg_genie_pandatv.js",
+                        "assets/pandatv_v1888_epg_governor.js",
+                        "assets/pandatv_v1888_guide_nav.js",
+                        "assets/pandatv_v2959_grid.js")
+              assert all(n in z.namelist() for n in needed), "Missing navigation / EPG assets"
+          print("Verified EPG stability assets")
+          PY
+      - name: Publish latest downloadable Panda TV release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: 'v1.8.9-epg-stability.1'
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # Panda TV 1.8.9 — EPG Stability & Guide Navigation
+
+          Owner-tested on Android TV and reported working on November 12, 2026.
+
+          - EPG Genie manual refresh queues requests rather than dropping them while the remote is active.
+          - Live Guide navigation avoids rebuilding the entire visible channel list on each Up/Down keypress.
+          - Prior TV/remote navigation improvements are retained.
+          - App launcher name: **Panda TV**.
+
+          **Important:** This is the exact signed 1.8.9 user-tested APK. It shares the 1.8.7 Panda TV test app signing identity but may install separately from older PandaFix builds. The native Media3 player remains unchanged, and the native-player Favorite button is not yet included.
+
+          Download: `PandaTV.apk` (Android TV/tablets, ARM/ARM64).
+          SHA-256: `e7bc25cd0915de1e35c2d446a10c764e313d93bbc496188ab7a1c54535fb3404`.
+          Previous release 1.8.7 is retained for rollback.
+          NOTES
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" PandaTV.apk --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$TAG" --title 'Panda TV 1.8.9 — EPG Stability' --notes-file release-notes.md --latest --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --target main --title 'Panda TV 1.8.9 — EPG Stability' --notes-file release-notes.md --latest
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease,assets,url
