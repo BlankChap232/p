@@ -1,0 +1,92 @@
+name: Publish exact owner-tested Panda TV 1.9.4 Forge APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-pandatv-194-owner-exact.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish-exact-apk:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reassemble exact user-supplied APK from private transfer objects
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,subprocess,base64,json,hashlib
+          shas=['ac2e8ab5eebe8f0fdf8484497b15d3b1ace95805','a3da103d7a2eb6859d97e52f45af39fdba7cb1be','042c5135ee26266c143ba084ebfb4a78f681e5a8','ae4063c889738cfc35e0adb68f22e70147c9f455','9351e62f3c33ad8997fd76e420f512a1480f6920','6bfa49eb33031c9ef3510df6b589b3c766c9dee5','fbca159f77e66e5eee4263862bc3051aa51aed53','c72e6415af641ddff3de479dc48be38252dd659b','5e0721783d132bf325cb8c209cc7d1af25f618d2','cb22b8486d568b34cd0fc645558cd0cc352a1933','32bb73dbc44fd56815f04ac81b4e901725d1642d','4028011cefb71cead884684202b4d43682a6d65f','f57c6f7096612628efb9ab7f59347c5e12c75c39','dfd9e13359f7581bc9d83a3a0298742e40528d6d','5e3060f7d88394dd8e66fdeb40aa47e6932bcd8e','beee2c6daee6c2f25561eb7e3fba65590a770536','832407cc8f978fdb74631119da2f781d49529acc']
+          with open("PandaTV.apk","wb") as dest:
+              for i,sha in enumerate(shas):
+                  response=subprocess.run(["gh","api","-H","Accept: application/vnd.github+json",
+                      f"repos/{os.environ['GITHUB_REPOSITORY']}/git/blobs/{sha}"],
+                      capture_output=True,text=True,check=True)
+                  info=json.loads(response.stdout)
+                  assert info.get("encoding")=="base64",f"Unexpected transfer encoding for {i}"
+                  raw=base64.b64decode(info["content"].replace("\n",""),validate=True)
+                  assert len(raw)==(600000 if i < len(shas)-1 else 322988),f"Bad chunk size {i}: {len(raw)}"
+                  dest.write(raw)
+                  print(f"Verified chunk {i+1}/{len(shas)} ({len(raw)} bytes)")
+          data=open("PandaTV.apk","rb").read()
+          digest=hashlib.sha256(data).hexdigest()
+          assert len(data)==9922988, "Uploaded package size does not match user file"
+          assert digest=="464213d97dc57be2cb86d1a4de3232b52d3976f93ffa61d4e443aac8297767e9", f"Hash mismatch: {digest}"
+          print("EXACT OWNER-SUPPLIED APK SHA-256:",digest)
+          PY
+          echo '464213d97dc57be2cb86d1a4de3232b52d3976f93ffa61d4e443aac8297767e9  PandaTV.apk' | sha256sum -c -
+          ls -lh PandaTV.apk
+      - name: Verify Android signature, package, version, app name, and ZIP alignment
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk | tee apk-signature.txt
+          "$BT/zipalign" -c -P 16 -v 4 PandaTV.apk > apk-alignment.txt
+          tail -n 5 apk-alignment.txt
+          "$BT/aapt" dump badging PandaTV.apk | tee apk-badging.txt | head -n 20
+          grep -q "^package: name='com.pandatv.elitev301.forgepreview193'" apk-badging.txt
+          grep -q "versionCode='1940'" apk-badging.txt
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          with ZipFile("PandaTV.apk") as z:
+              assert z.testzip() is None
+              required=[
+                "AndroidManifest.xml","classes.dex","assets/pandatv.html",
+                "assets/pandatv_v192_single_nav.js",
+                "assets/pandatv_v193_live_preview.js",
+                "assets/pandatv_v194_home_cleanup.js"
+              ]
+              for f in required: assert f in z.namelist(), "Missing " + f
+          print("Android manifest and Panda TV 1.9.4 UI assets verified.")
+          PY
+      - name: Publish exact APK, retaining previous release for rollback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: 'v1.9.4-forge-preview.1'
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,tagName,assets
+          gh release upload "$TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --title 'Panda TV 1.9.4 — Owner-Tested Forge Build' --latest --draft=false
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,isDraft,isPrerelease,assets,url
+      - name: Keep checksum audit
+        if: always()
+        run: |
+          if test -f PandaTV.apk; then sha256sum PandaTV.apk > apk-sha256.txt; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PandaTV-194-Exact-APK-Publication-Audit
+          path: |
+            apk-sha256.txt
+            apk-badging.txt
+            apk-signature.txt
+            apk-alignment.txt
+          retention-days: 14
+          if-no-files-found: ignore
