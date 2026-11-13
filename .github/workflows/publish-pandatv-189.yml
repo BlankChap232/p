@@ -29,7 +29,7 @@ jobs:
           sudo apt-get install -y -qq zstd
           base64 --decode release-patches/v1.8.9-epg-stability.zst.b64 > pandatv-189.patch.zst
           echo 'c6faab95bc2bbd2ce3746b5d2a31a60f6cd740aa5cb8d583921358cda1a7d602  pandatv-189.patch.zst' | sha256sum --check -
-          zstd -d --patch-from=base/PandaTV.apk pandatv-189.patch.zst -o PandaTV.apk
+          zstd -d --patch-from=base/PandaTV.apk pandatv-189.patch.zst -o PandaTV.apk --force
           echo 'e7bc25cd0915de1e35c2d446a10c764e313d93bbc496188ab7a1c54535fb3404  PandaTV.apk' | sha256sum --check -
       - name: Check APK signature, resources, and package
         run: |
