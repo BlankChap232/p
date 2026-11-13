@@ -61,7 +61,7 @@ jobs:
           bnames=set(base.namelist());nnames=set(new.namelist())
           assert nnames-bnames==added,nnames-bnames
           for name in bnames:
-              if re.match(r'META-INF/(MANIFEST.MF|[^/]+\\.(SF|RSA|DSA|EC))$',name,re.I):
+              if name.upper().startswith('META-INF/') and (name.upper()=='META-INF/MANIFEST.MF' or name.upper().endswith(('.SF','.RSA','.DSA','.EC'))):
                   continue
               if name in changed:continue
               assert base.read(name)==new.read(name), f'Unexpected app content change: {name}'
