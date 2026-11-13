@@ -1,0 +1,64 @@
+name: Verify Panda TV 1.9.0 signed EPG navigation test
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-pandatv-190.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout patch
+        uses: actions/checkout@v4
+      - name: Download verified 1.8.9 public base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p base
+          gh release download v1.8.9-epg-stability.1 --repo "$GITHUB_REPOSITORY" --pattern 'PandaTV.apk' --dir base
+          echo 'e7bc25cd0915de1e35c2d446a10c764e313d93bbc496188ab7a1c54535fb3404  base/PandaTV.apk' | sha256sum --check -
+      - name: Reconstruct signed test APK
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd
+          base64 -d release-patches/v1.9.0-test.zst.b64 > patch.zst
+          echo 'f359a53518c207819cc6795b58879ef45e32ba29aad198ccde36dc2209239d39  patch.zst' | sha256sum --check -
+          zstd -d --patch-from=base/PandaTV.apk patch.zst -o PandaTV_1.9.0_TEST.apk --force
+          echo '197d20d2806bda60fea60d2a86d0f3d8493ae506e5d2d16710516f0e1e12cdd6  PandaTV_1.9.0_TEST.apk' | sha256sum --check -
+      - name: Verify with Android official build tools
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/apksigner" verify --verbose --print-certs PandaTV_1.9.0_TEST.apk | tee apk-signature.txt
+          "$BT/zipalign" -c -P 16 -v 4 PandaTV_1.9.0_TEST.apk | tee apk-alignment.txt
+          "$BT/aapt" dump badging PandaTV_1.9.0_TEST.apk | tee apk-badging.txt
+          grep -q "^package: name='com.pandatv.elitev301.touch187'" apk-badging.txt
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          expected = [
+            'assets/epg_genie_pandatv.js', 'assets/epg_genie_primary_v12.js',
+            'assets/pandatv_v1888_epg_governor.js', 'assets/pandatv_v1888_guide_nav.js',
+            'assets/pandatv_v1888_guide_nav.css'
+          ]
+          with ZipFile('PandaTV_1.9.0_TEST.apk') as z:
+              assert z.testzip() is None
+              assert all(n in z.namelist() for n in expected)
+          print('EPG navigation test content validated.')
+          PY
+      - name: Upload validation summary and test installer artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PandaTV-1.9.0-Epg-Nav-Verified
+          path: |
+            PandaTV_1.9.0_TEST.apk
+            apk-signature.txt
+            apk-alignment.txt
+            apk-badging.txt
+          retention-days: 14
