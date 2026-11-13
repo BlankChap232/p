@@ -1,0 +1,37 @@
+name: Generate official Gradle 8.9 wrapper for PandaTV Forge
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/generate-gradle-wrapper.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  wrapper:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install trusted Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Generate official wrapper scripts and jar
+        run: |
+          set -euo pipefail
+          mkdir -p forge-wrapper
+          cd forge-wrapper
+          printf "rootProject.name = 'PandaTVWrapperGenerator'\n" > settings.gradle
+          printf "\n" > build.gradle
+          gradle wrapper --gradle-version 8.9 --distribution-type bin
+          echo '498495120a03b9a6ab5d155f5de3c8f0d986a449153702fb80fc80e134484f17  gradle/wrapper/gradle-wrapper.jar' | sha256sum -c -
+          sed -i '/^distributionUrl=/a distributionSha256Sum=d725d707bfabd4dfdc958c624003b3c80accc03f7037b5122c4b1d0ef15cecab' gradle/wrapper/gradle-wrapper.properties
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PandaTV-Official-Gradle-Wrapper-8.9
+          path: |
+            forge-wrapper/gradlew
+            forge-wrapper/gradlew.bat
+            forge-wrapper/gradle/wrapper/gradle-wrapper.jar
+            forge-wrapper/gradle/wrapper/gradle-wrapper.properties
+          include-hidden-files: true
+          retention-days: 7
