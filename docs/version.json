@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "published": true,
-  "versionName": "1.8.7-tvtest",
+  "versionName": "1.9.0-epg-navigation.1",
   "applicationId": "com.pandatv.elitev301.touch187",
-  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v1.8.7-tv-tablet-test.1/PandaTV.apk",
-  "sizeBytes": 25541910,
-  "sha256": "9c8da985ddd18962f6c9315ad3e0b10c9ed53ecd6f69072d9e493b4a54920f25",
-  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v1.8.7-tv-tablet-test.1",
-  "channel": "owner-tested-preview"
+  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v1.9.0-epg-navigation.1/PandaTV.apk",
+  "sizeBytes": 25551635,
+  "sha256": "090575a5af7e995ec1b274ce9c5eb68ee50e4500700f4fcb04e4de1231e14b24",
+  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v1.9.0-epg-navigation.1",
+  "channel": "owner-tested-public"
 }
