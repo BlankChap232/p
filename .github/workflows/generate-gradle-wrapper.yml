@@ -11,6 +11,11 @@ jobs:
   wrapper:
     runs-on: ubuntu-latest
     steps:
+      - name: Set supported JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - name: Install trusted Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -22,6 +27,7 @@ jobs:
           cd forge-wrapper
           printf "rootProject.name = 'PandaTVWrapperGenerator'\n" > settings.gradle
           printf "\n" > build.gradle
+          gradle --version
           gradle wrapper --gradle-version 8.9 --distribution-type bin
           echo '498495120a03b9a6ab5d155f5de3c8f0d986a449153702fb80fc80e134484f17  gradle/wrapper/gradle-wrapper.jar' | sha256sum -c -
           sed -i '/^distributionUrl=/a distributionSha256Sum=d725d707bfabd4dfdc958c624003b3c80accc03f7037b5122c4b1d0ef15cecab' gradle/wrapper/gradle-wrapper.properties
