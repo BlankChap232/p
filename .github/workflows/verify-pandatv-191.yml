@@ -28,9 +28,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq zstd
           base64 -d release-patches/v1.9.1-compact-guide.zst.b64 > patch.zst
-          echo '70ba4b9996a32b519399bc1be4654ffadf43f2d59d601b56c447d433c7f5c5f0  patch.zst' | sha256sum --check -
+          echo '8a5e3f13aaf24b96eeef8138cce54b8cbca68b68496a238c915fac49c079f0dd  patch.zst' | sha256sum --check -
           zstd -d --patch-from=base/PandaTV.apk patch.zst -o PandaTV_1.9.1_Compact_Guide_TEST.apk --force
-          echo '872be7151519aa367ef271e3d31c02928dee263ce72f9f92342b312a54df2912  PandaTV_1.9.1_Compact_Guide_TEST.apk' | sha256sum --check -
+          echo 'f7759df9ad69bb5c7ca8fbc8233de72cccdb40eb29bb1b1f097bc283094cc386  PandaTV_1.9.1_Compact_Guide_TEST.apk' | sha256sum --check -
       - name: Verify official Android APK signatures and 16 KiB alignment
         run: |
           set -euo pipefail
