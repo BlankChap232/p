@@ -1,0 +1,100 @@
+name: Validate and publish Panda TV 1.9.4 owner-tested APK
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  validate-and-publish:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check exact owner-tested APK exists in draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: 'v1.9.4-forge-preview.1'
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,assets > draft.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open('draft.json'))
+          assert data['isDraft'], 'Release must still be a draft to validate first'
+          assets=[a for a in data['assets'] if a['name']=='PandaTV.apk']
+          assert len(assets)==1, 'Attach exactly one asset named PandaTV.apk; do not rename a ZIP to APK'
+          assert int(assets[0]['size'])>1000000, 'APK is unexpectedly small or incomplete'
+          print('Owner APK asset available:', assets[0]['name'], assets[0]['size'])
+          PY
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir .
+          test -s PandaTV.apk
+          file PandaTV.apk
+          sha256sum PandaTV.apk | tee apk.sha256
+      - name: Verify Android package signature and install format
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk | tee signature.txt
+          "$BT/zipalign" -c -P 16 -v 4 PandaTV.apk | tee alignment.txt | tail -n 8
+          "$BT/aapt" dump badging PandaTV.apk | tee badging.txt | head -n 14
+          grep -q "^package: name='com.pandatv.elitev301.forgepreview193'" badging.txt
+          grep -q "versionCode='1940'" badging.txt
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('PandaTV.apk') as z:
+              assert z.testzip() is None, 'Corrupt ZIP member'
+              paths=set(z.namelist())
+              assert 'AndroidManifest.xml' in paths
+              assert 'classes.dex' in paths
+              assert any(n.startswith('assets/') and n.endswith('pandatv.html') for n in paths), 'Missing PandaTV interface'
+              assert any(n.startswith('assets/') and 'pandatv_v192_single_nav.js' in n for n in paths), 'Missing single-nav UI'
+              assert any(n.startswith('assets/') and n.endswith('panda_logo.png') for n in paths), 'Missing branding asset'
+          print('Panda TV 1.9.4 APK appears structurally complete.')
+          PY
+      - name: Publish only the verified test APK, preserving 1.9.0 history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: 'v1.9.4-forge-preview.1'
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease,assets,url
+      - name: Point website backup to verified new release
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          apk=Path('PandaTV.apk')
+          tag='v1.9.4-forge-preview.1'
+          base='https://github.com/BlankChap232/p/releases'
+          d={
+            'schema':1,'published':True,
+            'versionName':'1.9.4-forge-top-tabs-fix',
+            'applicationId':'com.pandatv.elitev301.forgepreview193',
+            'apkUrl':f'{base}/download/{tag}/PandaTV.apk',
+            'sizeBytes':apk.stat().st_size,
+            'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
+            'releaseNotesUrl':f'{base}/tag/{tag}',
+            'channel':'owner-tested-forge-preview'
+          }
+          Path('docs/version.json').write_text(json.dumps(d,indent=2)+'\n')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/version.json
+          git commit -m 'Point PandaTV website backup to verified public 1.9.4 Forge APK'
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PandaTV-194-publish-audit
+          path: |
+            apk.sha256
+            badging.txt
+            signature.txt
+            alignment.txt
+          if-no-files-found: ignore
+          retention-days: 14
