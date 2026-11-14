@@ -1,0 +1,149 @@
+name: Build Panda Tv Elite 1.9.1 navigation and EPG QA APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-pandatv-elite-191-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download approved Elite playback baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download v1.8.9-elite-compact-guide.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir .
+          echo '18e330f4110b4117f76223a936daf16de14e8e2fc2ab9a39fca5ca040cf054a8  PandaTV.apk' | sha256sum -c -
+          mv PandaTV.apk PandaTV-base.apk
+      - name: Apply narrow interface-only patch without rebuilding Media3
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq zstd >/dev/null
+          base64 --decode release-patches/elite191-assets.patch.zst.b64 > elite191.patch.zst
+          echo '09ae895efbdf39c4b666fabf628a24313acd62019cd173dc6916487ae0d247e8  elite191.patch.zst' | sha256sum -c -
+          zstd -d -q elite191.patch.zst -o elite191.patch
+          mkdir -p patchwork
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          from pathlib import Path
+          with ZipFile('PandaTV-base.apk') as z:
+              for name in z.namelist():
+                  if name.startswith('assets/') and not name.endswith('/'):
+                      dest=Path('patchwork')/name
+                      dest.parent.mkdir(parents=True,exist_ok=True)
+                      dest.write_bytes(z.read(name))
+          PY
+          patch --batch --directory=patchwork -p1 < elite191.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('patchwork/assets/pandatv_elite_v191_warmup.js')
+          s=p.read_text()
+          old=" const channelCount=Array.isArray(window.state?.live)?state.live.length:0;\n const epgCount=window.state?.epg&&typeof state.epg==='object'?Object.keys(state.epg).length:0;"
+          new=" const loaded=typeof state==='object' && !!state && Array.isArray(state.live);\n const channelCount=loaded?state.live.length:0;\n // Avoid an expensive full-EPG Object.keys scan during startup.\n const epgCount=loaded && !!state.epg ? 1:0;"
+          assert s.count(old)==1, 'Startup warmup source unexpectedly changed'
+          p.write_text(s.replace(old,new))
+          PY
+          node --check patchwork/assets/pandatv_v2943_native_catalog.js
+          node --check patchwork/assets/pandatv_v2959_grid.js
+          node --check patchwork/assets/pandatv_v186_nav_recovery.js
+          node --check patchwork/assets/pandatv_elite_v191_warmup.js
+      - name: Repack exact native decoder and player bytecode, new QA installation identity
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from zipfile import ZipFile,ZipInfo,ZIP_DEFLATED
+          from pathlib import Path
+          from hashlib import sha256
+          base='PandaTV-base.apk'
+          items=Path('patchwork/assets')
+          changes={ 'assets/'+p.name:p for p in items.iterdir() if p.is_file() and p.name in {
+              'pandatv.html','pandatv_v2943_native_catalog.js','pandatv_v2959_grid.js',
+              'pandatv_v186_nav_recovery.js','pandatv_elite_v191_polish.css','pandatv_elite_v191_warmup.js'}}
+          with ZipFile(base) as z, ZipFile('PandaTV-raw.apk','w') as out:
+              old_id='com.pandatv.elitev301.guide190'.encode('utf-16le')
+              new_id='com.pandatv.elitev301.elite191'.encode('utf-16le')
+              assert len(old_id)==len(new_id)
+              for name in z.namelist():
+                  if name in {'META-INF/MANIFEST.MF','META-INF/PANDAGUI.SF','META-INF/PANDAGUI.RSA'}:continue
+                  info=z.getinfo(name)
+                  data=z.read(name)
+                  if name=='AndroidManifest.xml':
+                      assert data.count(old_id)>=1
+                      data=data.replace(old_id,new_id)
+                  if name in changes:data=changes[name].read_bytes()
+                  zi=ZipInfo(name,info.date_time)
+                  zi.compress_type=info.compress_type
+                  zi.external_attr=info.external_attr;zi.internal_attr=info.internal_attr
+                  zi.create_system=info.create_system;zi.comment=info.comment
+                  out.writestr(zi,data,compress_type=zi.compress_type,compresslevel=6)
+              for name in sorted(set(changes)-set(z.namelist())):
+                  out.writestr(name,changes[name].read_bytes(),compress_type=ZIP_DEFLATED,compresslevel=6)
+          with ZipFile(base) as old,ZipFile('PandaTV-raw.apk') as new:
+              assert new.testzip() is None
+              unchanged=[n for n in old.namelist() if n.endswith('.dex') or n.endswith('.so')]
+              assert len(unchanged)==15,unchanged
+              for name in unchanged:assert sha256(old.read(name)).digest()==sha256(new.read(name)).digest(),name
+          print('All five player DEX and ten FFmpeg/Media3 native libraries preserved.')
+          PY
+      - name: Sign a separate test installation and verify
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/zipalign" -f -p 4 PandaTV-raw.apk PandaTV-aligned.apk
+          PASS="$(openssl rand -hex 24)"
+          keytool -genkeypair -noprompt -alias pandaqa -keyalg RSA -keysize 3072 -validity 365 \
+            -keystore "$RUNNER_TEMP/panda-elite-qa.jks" -storepass "$PASS" -keypass "$PASS" \
+            -dname 'CN=Panda Tv Elite QA Test' >/dev/null 2>&1
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/panda-elite-qa.jks" --ks-key-alias pandaqa \
+            --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --out PandaTV-TEST.apk PandaTV-aligned.apk
+          "$BT/apksigner" verify --verbose PandaTV-TEST.apk
+          "$BT/zipalign" -c -v 4 PandaTV-TEST.apk > apk-zipalign.txt
+          "$BT/aapt" dump badging PandaTV-TEST.apk | tee badging.txt | head -n 15
+          grep -q "^package: name='com.pandatv.elitev301.elite191'" badging.txt
+          grep -q "^application-label:'Panda Tv Elite'" badging.txt
+          sha256sum PandaTV-TEST.apk > PandaTV-sha256.txt
+      - name: Publish separate QA prerelease, not the official download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v1.9.1-elite-navigation-qa.1
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # Panda Tv Elite 1.9.1 — Guide/EPG/Remote QA
+          **TEST BUILD ONLY — not an official replacement.** Uses a separate temporary test signing certificate and application ID
+          `com.pandatv.elitev301.elite191`; installs alongside the approved Elite release. Keep your working install.
+          
+          - On initial channel tune, player title is channel name plus channel number.
+          - Sends current show from EPG when available via the existing metadata bridge.
+          - Coalesces Android guide scrolling updates and caches visible program rows briefly.
+          - 10-second dismissible EPG loading notification; neither playback nor UI is blocked.
+          - Compact Home shortcuts; one Down from top controls can reach Live/Movies/Series.
+          - Preserves all existing playback bytecode and native Media3/FFmpeg libraries.
+          
+          The player channel-switching title still needs device verification; no IPTV streams were available for this CI test.
+          This is a QA build signed with a nonpersistent test key; it cannot update any existing PandaTV installation.
+          NOTES
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" PandaTV-TEST.apk --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease --title 'Panda Tv Elite 1.9.1 — Interface QA' --notes-file release-notes.md
+          else
+            gh release create "$TAG" PandaTV-TEST.apk --repo "$GITHUB_REPOSITORY" --target main \
+              --prerelease --title 'Panda Tv Elite 1.9.1 — Interface QA' --notes-file release-notes.md
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PandaTv-Elite-191-build-audit
+          path: |
+            badging.txt
+            apk-zipalign.txt
+            PandaTV-sha256.txt
+          retention-days: 7
+          if-no-files-found: ignore
