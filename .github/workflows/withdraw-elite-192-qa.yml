@@ -1,0 +1,29 @@
+name: Withdraw broken Panda Tv Elite 1.9.2 channel-surf QA build
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/withdraw-elite-192-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  withdraw:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Withdraw black-screen QA APK but keep the working 1.9.1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=v1.9.2-elite-channel-surf-title-qa.1
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft
+          cat > withdrawn.md <<'NOTES'
+          WITHDRAWN - DO NOT INSTALL. This test produced a black-screen freeze after changing channels on a user's Android device. The 1.9.2 native channel-change metadata request is not safe and is being reverted. Use the previously working 1.9.1 test instead:
+          https://github.com/BlankChap232/p/releases/download/v1.9.1-elite-navigation-qa.1/PandaTV-TEST.apk
+
+          The official Panda Tv Elite public release remains unchanged.
+          NOTES
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "WITHDRAWN — Panda Tv Elite 1.9.2 Black Screen" --notes-file withdrawn.md --draft=true
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,url
