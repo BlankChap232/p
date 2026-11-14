@@ -1,0 +1,172 @@
+name: Build Panda Tv Elite 2.0.1 channel names and current show QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-pandatv-elite-201-channel-label-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve user-confirmed working 2.0 APK and narrow metadata patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p baseline source work tools
+          gh release download v2.0.0-elite-epg-resume-qa.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTvElite-2.0-TEST.apk --dir baseline
+          echo 'f9dc010cd14c34e8dde3631ed8061ca5f11f69297b64f1cf4b2d76db4d4077bf  baseline/PandaTvElite-2.0-TEST.apk' | sha256sum -c -
+          base64 -d release-patches/panda201-channel-title-source.tar.gz.b64 > source/label_patch.tar.gz
+          echo '40fc1c29d257560742be9ca7f2fbcb21de1757baef1960214a1c3ded20e655b9  source/label_patch.tar.gz' | sha256sum -c -
+          tar -xzf source/label_patch.tar.gz -C source
+          python3 -m py_compile source/patch_native_label_only.py
+          test -s source/panda201-guide-surf-title.patch
+      - name: Patch only the channel-label handoff in existing 2.0 WebView assets
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          with ZipFile('baseline/PandaTvElite-2.0-TEST.apk') as z:
+            assert z.testzip() is None
+            for n in ('AndroidManifest.xml','classes4.dex','assets/pandatv_v2943_native_catalog.js'):
+              dest=Path('work')/n;dest.parent.mkdir(parents=True,exist_ok=True)
+              dest.write_bytes(z.read(n))
+            assert len([x for x in z.namelist() if x.endswith('.so')])==10
+            assert len([x for x in z.namelist() if x.endswith('.dex')])==5
+          PY
+          patch --batch -p1 --directory=work -i "$PWD/source/panda201-guide-surf-title.patch"
+          node --check work/assets/pandatv_v2943_native_catalog.js
+          grep -Fq 'surfLabels' work/assets/pandatv_v2943_native_catalog.js
+          grep -Fq 'panda_epg_genie_v200.js' <(unzip -Z -1 baseline/PandaTvElite-2.0-TEST.apk)
+      - name: Assemble safe native title-only lookup with Media3 playback untouched
+        run: |
+          set -euo pipefail
+          BASE='https://github.com/baksmali/smali/releases/download/3.0.10'
+          curl -fsSL --retry 3 "$BASE/baksmali-3.0.10-fat-release.jar" -o tools/baksmali.jar
+          curl -fsSL --retry 3 "$BASE/smali-3.0.10-fat-release.jar" -o tools/smali.jar
+          echo '37ae4a41a8886e15c20b8362fa4250f96bbdb55e1a608199ad8b5dff068b588f  tools/baksmali.jar' | sha256sum -c -
+          echo '32fa0e88a6c397b3922201adf5f3e534fbaed5a663c71d0c558c3ddce0af844a  tools/smali.jar' | sha256sum -c -
+          java -jar tools/baksmali.jar disassemble work/classes4.dex -o work/smali
+          cp work/smali/com/pandatv/iptv/NativePlayerActivity.smali work/native-before.smali
+          python3 source/patch_native_label_only.py work/smali/com/pandatv/iptv/NativePlayerActivity.smali
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          old=Path('work/native-before.smali').read_text()
+          new=Path('work/smali/com/pandatv/iptv/NativePlayerActivity.smali').read_text()
+          def block(src,signature):
+            pat=r'(?ms)^\.method\b[^\n]*'+re.escape(signature)+r'[^\n]*\n.*?^\.end method'
+            m=re.search(pat,src)
+            assert m, signature
+            return m.group()
+          # The critical playback, lifecycle, and native handoff methods
+          # must be byte-for-byte unchanged at smali source level.
+          for name in ('start(Ljava/lang/String;)V','parsePayload(Ljava/lang/String;)V',
+                       'onStart()V','onStop()V','onDestroy()V','reloadForRecovery(J)V'):
+            assert block(old,name)==block(new,name),'Protected method modified: '+name
+          assert block(old,'channel(I)V')!=block(new,'channel(I)V')
+          assert 'panda201SurfTitle()Ljava/lang/String;' in new
+          assert 'requestCurrentProgramInfo()V' not in block(new,'channel(I)V')
+          PY
+          java -jar tools/smali.jar assemble work/smali -o work/classes4-patched.dex
+          test -s work/classes4-patched.dex
+      - name: Repack only channel-title JS and activity bytecode from working 2.0
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZipInfo
+          from hashlib import sha256
+          baseline=Path('baseline/PandaTvElite-2.0-TEST.apk')
+          replacement={
+            'classes4.dex':Path('work/classes4-patched.dex').read_bytes(),
+            'assets/pandatv_v2943_native_catalog.js':Path('work/assets/pandatv_v2943_native_catalog.js').read_bytes()}
+          oldid='com.pandatv.elitev301.elite200'.encode('utf-16le')
+          newid='com.pandatv.elitev301.elite201'.encode('utf-16le')
+          assert len(oldid)==len(newid)
+          with ZipFile(baseline) as old, ZipFile('work/unsigned.apk','w') as new:
+            for info in old.infolist():
+              n=info.filename
+              if n=='META-INF/MANIFEST.MF' or (n.startswith('META-INF/') and n.endswith(('.SF','.RSA','.DSA'))): continue
+              data=replacement.get(n,old.read(n))
+              if n=='AndroidManifest.xml':
+                assert data.count(oldid)>0
+                data=data.replace(oldid,newid)
+              zi=ZipInfo(n,info.date_time)
+              zi.compress_type=info.compress_type
+              zi.external_attr=info.external_attr
+              zi.internal_attr=info.internal_attr
+              zi.create_system=info.create_system
+              zi.comment=info.comment
+              new.writestr(zi,data,compress_type=zi.compress_type,compresslevel=6)
+          with ZipFile(baseline) as a,ZipFile('work/unsigned.apk') as b:
+            assert b.testzip() is None
+            libs=[n for n in a.namelist() if n.endswith('.so')]
+            dex=[n for n in a.namelist() if n.endswith('.dex')]
+            assert len(libs)==10 and len(dex)==5
+            changed={'AndroidManifest.xml','classes4.dex','assets/pandatv_v2943_native_catalog.js'}
+            for n in a.namelist():
+              if n.startswith('META-INF/') or n in changed:continue
+              assert sha256(a.read(n)).digest()==sha256(b.read(n)).digest(),n
+            assert newid in b.read('AndroidManifest.xml')
+            assert b'const getMeta=window.PandaProgramGuide172?.metadataFor' in b.read('assets/pandatv_v2943_native_catalog.js')
+          print('Verified: all native decoders, 4 untouched DEX, EPG database and all other assets preserved.') 
+          PY
+      - name: Sign separate QA build and verify Android installer
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/zipalign" -f -p 4 work/unsigned.apk work/aligned.apk
+          PASS="$(openssl rand -hex 24)"
+          keytool -genkeypair -noprompt -alias pandaqa -keyalg RSA -keysize 3072 -validity 365 \
+            -keystore "$RUNNER_TEMP/pandatv20-qa.jks" -storepass "$PASS" -keypass "$PASS" \
+            -dname 'CN=Panda Tv Elite 2.0.1 Channel Title QA' >/dev/null 2>&1
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/pandatv20-qa.jks" --ks-key-alias pandaqa \
+            --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --out PandaTvElite-2.0.1-SURF-TEST.apk work/aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs PandaTvElite-2.0.1-SURF-TEST.apk | tee signature.txt
+          "$BT/zipalign" -c -v 4 PandaTvElite-2.0.1-SURF-TEST.apk > alignment.txt
+          "$BT/aapt" dump badging PandaTvElite-2.0.1-SURF-TEST.apk | tee badging.txt | head -n 16
+          grep -q "^package: name='com.pandatv.elitev301.elite201'" badging.txt
+          grep -q "^application-label:'Panda Tv Elite'" badging.txt
+          sha256sum PandaTvElite-2.0.1-SURF-TEST.apk > apk-sha256.txt
+      - name: Publish separate 2.0.1 QA test installer, never overwrite working 2.0
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v2.0.1-elite-channel-show-label-qa.1
+        run: |
+          set -euo pipefail
+          cat > notes.md <<'NOTES'
+          # Panda Tv Elite 2.0.1 — Channel Name & Current Program (QA)
+
+          **Test build only.** Built from the user-confirmed working Panda Tv Elite 2.0 APK, with exactly one functional change: when channel surfing, show the correct channel name/number and current EPG show when available.
+
+          The JavaScript guide precomputes up to 61 channel labels as the player opens and includes them in an otherwise unused live-only metadata payload field. The native title renderer reads the label from that cached list while surfing. The channel-change routine does NOT make EPG/bridge/network calls; it uses the same stream URL selection and playback pipeline as working 2.0. Missing data falls back to the old number display.
+
+          Android signing/bytecode details:
+          - All 10 native FFmpeg/Media3 decoder libraries are byte-identical to working 2.0.
+          - Four untouched DEX files, EPG Genie 2.0, guide, navigation and background/resume recovery are unchanged.
+          - Only the label section of the native player activity's channel method and a small pure label helper change; the stream-start, lifecycle and recovery methods have been compared unchanged.
+          - The app is separately signed with package \`com.pandatv.elitev301.elite201\`, so it installs alongside 2.0; provider credentials need entering again.
+
+          Test channel surfing and the currently airing show on Android before replacing the working 2.0 version. Actual live streaming cannot be validated in CI.
+          NOTES
+          gh release create "$TAG" PandaTvElite-2.0.1-SURF-TEST.apk --repo "$GITHUB_REPOSITORY" --target main --prerelease --title 'Panda Tv Elite 2.0.1 — Channel Names QA' --notes-file notes.md
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease,assets,url
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PandaTvElite201-ChannelLabel-QA-Audit
+          path: |
+            signature.txt
+            alignment.txt
+            badging.txt
+            apk-sha256.txt
+          retention-days: 7
+          if-no-files-found: ignore
