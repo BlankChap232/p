@@ -1,0 +1,64 @@
+name: Publish Panda Tv Elite 2.0 engineering source (not an APK)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-pandatv-elite-200-source.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish-source:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify source archive and inspect contents
+        run: |
+          set -euo pipefail
+          base64 -d release-patches/panda-tv-elite-2.0-engineering-core.tar.br.b64 > PandaTvElite_2.0_Engineering_Core.tar.br
+          echo 'bd16d4b468e6f6974ddceffe3140d4f211529c33392747374c3d37f86f93598b  PandaTvElite_2.0_Engineering_Core.tar.br' | sha256sum -c -
+          python3 -m pip install --quiet --disable-pip-version-check brotli
+          python3 - <<'PY'
+          import brotli,tarfile,io,hashlib,pathlib
+          p=pathlib.Path('PandaTvElite_2.0_Engineering_Core.tar.br')
+          raw=brotli.decompress(p.read_bytes())
+          assert hashlib.sha256(raw).hexdigest()=='2c26c916dd0367d41f5c4a5aeac5e3d4ac9d12a7b30f2526802c786d3b5d0e6c'
+          with tarfile.open(fileobj=io.BytesIO(raw),mode='r:') as t:
+            names=set(t.getnames())
+            assert names=={'assets/panda_epg_genie_v200.js','guide.patch','patch_native_resume.py'},names
+            t.extractall('verified-source',filter='data')
+          print('Source files verified:',sorted(names))
+          PY
+          node --check verified-source/assets/panda_epg_genie_v200.js
+          test -s verified-source/guide.patch
+          test -s verified-source/patch_native_resume.py
+      - name: Publish source-only GitHub release without altering the official Android download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v2.0.0-epg-reliability-source.1
+        run: |
+          set -euo pipefail
+          cat > notes.md <<'NOTES'
+          # Panda Tv Elite 2.0 — EPG Reliability Engineering Source
+          
+          This release contains **engineering source and an unverified native resume patch**, NOT an installable Android APK.
+          
+          Source archive: `PandaTvElite_2.0_Engineering_Core.tar.br` (Brotli-compressed TAR). Its verified members are:
+          - `assets/panda_epg_genie_v200.js`: persistent on-device EPG schedule database and background collection logic.
+          - `guide.patch`: a performance patch to the approved guide-grid JavaScript.
+          - `patch_native_resume.py`: candidate native Media3 surface-reconnection repair, **not yet verified on actual Android devices**.
+          
+          Source code checks have passed; **no end-to-end Android APK build, device background/resume testing, or provider-wide EPG coverage testing is claimed**. The source package must be integrated and signed into an app before it can be installed. All channels can be listed, but program data coverage still depends on the provider's real XMLTV source.
+          
+          **Production remains Panda Tv Elite 1.9.3**. Its public `PandaTV.apk` and website download link are deliberately unchanged. Do not rename this archive to `.apk` or push it to customers as an Android installer.
+          
+          Source SHA-256: `bd16d4b468e6f6974ddceffe3140d4f211529c33392747374c3d37f86f93598b`.
+          NOTES
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" PandaTvElite_2.0_Engineering_Core.tar.br --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title 'Panda Tv Elite 2.0 — EPG Reliability Source (Engineering)' --prerelease --notes-file notes.md
+          else
+            gh release create "$TAG" PandaTvElite_2.0_Engineering_Core.tar.br --repo "$GITHUB_REPOSITORY" --target main --prerelease --title 'Panda Tv Elite 2.0 — EPG Reliability Source (Engineering)' --notes-file notes.md
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease,assets,url
