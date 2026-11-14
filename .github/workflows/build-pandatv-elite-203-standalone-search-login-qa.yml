@@ -88,21 +88,21 @@ jobs:
             gate_anchor="g.querySelector('#p291Error').textContent=P.lastError}"
             assert gate.count(gate_anchor)==1,'Invalid-login overlay anchor missing'
             auto_recover="""g.querySelector('#p291Error').textContent=P.lastError;
- // Panda 2.0.3: on provider authentication failures, show the real three-field
- // login editor automatically AFTER sync flags clear, including for HTTP 401/403.
- const denied=/^(AUTH_DENIED|HTTP_401|HTTP_403)$/.test(String(err?.code||''));
- const firstSetupFailure=!P.stage && !(state.live?.length||state.movies?.length||state.series?.length);
- if(denied||firstSetupFailure){
-   let attempts=0;
-   const recover=()=>{
-     if(!P.gate||attempts++>35)return;
-     if(P.syncing||state.syncing){setTimeout(recover,100);return;}
-     if(!g.classList.contains('loginEditing'))window.pandaV291EditLogin();
-     loginFeedback('Connection needs attention. Review your server, username and password. '+P.lastError,true);
-   };
-   setTimeout(recover,120);
- }
-}"""
+           // Panda 2.0.3: on provider authentication failures, show the real three-field
+           // login editor automatically AFTER sync flags clear, including for HTTP 401/403.
+           const denied=/^(AUTH_DENIED|HTTP_401|HTTP_403)$/.test(String(err?.code||''));
+           const firstSetupFailure=!P.stage && !(state.live?.length||state.movies?.length||state.series?.length);
+           if(denied||firstSetupFailure){
+             let attempts=0;
+             const recover=()=>{
+               if(!P.gate||attempts++>35)return;
+               if(P.syncing||state.syncing){setTimeout(recover,100);return;}
+               if(!g.classList.contains('loginEditing'))window.pandaV291EditLogin();
+               loginFeedback('Connection needs attention. Review your server, username and password. '+P.lastError,true);
+             };
+             setTimeout(recover,120);
+           }
+          }"""
             gate=gate.replace(gate_anchor,auto_recover,1)
             # Remove Android keyboard autocapitalization/autocorrection from
             # account entry fields while preserving existing secret handling.
