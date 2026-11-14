@@ -1,0 +1,57 @@
+name: Audit Panda Tv Elite playback lifecycle and EPG architecture
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/audit-pandatv-20-lifecycle.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get exact approved production APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p approved
+          gh release download v1.9.3-elite-visible-tabs-public.1 --repo "$GITHUB_REPOSITORY" --pattern 'PandaTV.apk' --dir approved
+          echo 'e535444670aa495cdeb49f69c6ea6ebcb699aeb59e7b37327f7d5a7ac741729e  approved/PandaTV.apk' | sha256sum -c -
+      - name: Disassemble only the activity classes for controlled lifecycle audit
+        run: |
+          set -euo pipefail
+          mkdir -p tools dex audit
+          BASE='https://github.com/baksmali/smali/releases/download/3.0.10'
+          curl -fsSL --retry 3 "$BASE/baksmali-3.0.10-fat-release.jar" -o tools/baksmali.jar
+          echo '37ae4a41a8886e15c20b8362fa4250f96bbdb55e1a608199ad8b5dff068b588f  tools/baksmali.jar' | sha256sum -c -
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          with ZipFile('approved/PandaTV.apk') as z:
+              for name in ('classes.dex','classes2.dex','classes3.dex','classes4.dex','classes5.dex'):
+                  open('dex/'+name,'wb').write(z.read(name))
+          PY
+          for i in dex/classes*.dex; do
+            label="$(basename "$i" .dex)"
+            java -jar tools/baksmali.jar disassemble "$i" -o "audit/$label" >/dev/null
+          done
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          for cls in ('NativePlayerActivity','HomeActivity'):
+              hits=list(Path('audit').rglob(cls+'.smali'))
+              print('ACTIVITY',cls,'FILES',len(hits))
+              for p in hits:
+                  s=p.read_text()
+                  print('SOURCE',str(p))
+                  for m in re.finditer(r'(?ms)^\.method\b[^\n]*(?:onStart|onStop|onResume|onPause|onDestroy|onSaveInstanceState|onBackPressed|onPlayerError|onSurfaceTextureDestroyed|onPlayerStateChanged|onPlaybackStateChanged|onNewIntent|startChannel|nextChannel|previousChannel|switchChannel|updateDetailsIfCurrent|setPlayer|restore)\b[^\n]*\n.*?^\.end method',s):
+                      body=m.group(0)
+                      if len(body)>15000:body=body[:15000]+'\n[TRUNCATED]'
+                      print('\nMETHOD',body,'\nEND')
+                  for line in s.splitlines():
+                      if line.startswith('.field') and any(w in line.lower() for w in ('player','surface','url','resume','destroy','video','lifecycle','stopped','state','paused','retry')):
+                          print('FIELD',line[:180])
+          PY
