@@ -38,6 +38,17 @@ This first stable build is a **one-time separate installation** and will not car
 
 Generate a 3072-bit RSA Android signing keystore locally on a trusted computer using the JDK keytool. Keep at least two encrypted/offline backups, and add the keystore (base64-encoded) and its passwords as encrypted GitHub Actions repository secrets; see [GitHub's Actions secrets documentation](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions).
 
+On Windows, open a PowerShell terminal in a private folder on your PC with JDK 17+ installed, and run:
+
+```powershell
+keytool -genkeypair -storetype PKCS12 -keystore panda-release.p12 -alias pandatv -keyalg RSA -keysize 3072 -validity 10950 -dname "CN=Panda Tv Elite Production Signing"
+[Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path .\\panda-release.p12))) | Set-Content -NoNewline .\\panda-release-base64.txt
+```
+
+Choose a new, unique strong keystore password when prompted and save it securely. `panda-release.p12` is the private signing identity. **Back it up somewhere private/offline and never upload it to a public repository, release, support ticket, or chat.** The base64 file contains the same private key in reversible form; treat it equally sensitively.
+
+Go to **GitHub → BlankChap232/p → Settings → Secrets and variables → Actions → New repository secret**. Create the following values and keep the keystore file offline. If using PKCS12 with the same store and key password, set both password secrets to the same value.
+
 Suggested secret names:
 - `PANDA_PROD_KEYSTORE_B64` — base64 of the keystore file (single line)
 - `PANDA_PROD_STORE_PASSWORD` — the private keystore password
