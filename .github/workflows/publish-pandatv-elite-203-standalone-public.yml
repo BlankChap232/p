@@ -57,7 +57,7 @@ jobs:
           print('Exact approved 2.0.3 APK, native updater present, EPG + Media3 decoders preserved')
           PY
           echo "SIGNING_CERTIFICATE"
-          "$BT/apksigner" verify --print-certs PandaTV.apk | grep '^Signer #1 certificate SHA-256 digest:'
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk | grep -E 'Signer: certificate SHA-256 digest:'
           echo "VERSION_CODE"
           grep '^package:' apk-badging.txt
       - name: Promote byte-identical APK to public latest without re-signing
