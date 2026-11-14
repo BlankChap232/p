@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "published": true,
-  "versionName": "1.9.3",
-  "applicationId": "com.pandatv.elitev301.elite193",
-  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v1.9.3-elite-visible-tabs-public.1/PandaTV.apk",
-  "sizeBytes": 25467392,
-  "sha256": "e535444670aa495cdeb49f69c6ea6ebcb699aeb59e7b37327f7d5a7ac741729e",
-  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v1.9.3-elite-visible-tabs-public.1",
+  "versionName": "2.0.1",
+  "applicationId": "com.pandatv.elitev301.elite201",
+  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v2.0.1-elite-channel-labels-public.1/PandaTV.apk",
+  "sizeBytes": 25475660,
+  "sha256": "ea49aeadc7999ff9de37b1042f79e4f748dda9eef22c2266aabfefcf9f875f38",
+  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v2.0.1-elite-channel-labels-public.1",
   "channel": "owner-approved-public-elite",
   "launcherName": "Panda Tv Elite",
-  "installationNote": "Separate application ID and signing identity; not an in-place update to older Elite builds"
+  "installationNote": "Separately signed Android application identity; not an in-place update to earlier Elite versions"
 }
