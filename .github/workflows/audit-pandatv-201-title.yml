@@ -37,7 +37,7 @@ jobs:
               print('METHODS:',*[m.group(0).splitlines()[0] for m in blocks],sep='\n')
               for m in blocks:
                   b=m.group(0);sig=b.splitlines()[0].lower()
-                  if any(k in sig for k in ['channel','update','render','overlay','title','switch','surf','detail','metadata','oncreate']):
+                  if any(k in sig for k in ['channel','update','render','overlay','title','switch','surf','detail','metadata','oncreate','parsepayload','tuneexisting']):
                       if len(b)>18000:b=b[:18000]+'\n[TRUNCATED]'
                       print('\n--- BEGIN '+target+' '+b.splitlines()[0]+' ---\n'+b+'\n--- END ---\n')
           PY
