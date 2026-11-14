@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0c0b19">
+<meta name="robots" content="noindex, nofollow">
+<title>Panda Tv Elite — Private Owner Console</title>
+<meta name="description" content="Panda Tv Elite private owner access console. Authentication required for all access records.">
+<style>
+:root {color-scheme:dark;--bg:#0b0917;--panel:#181329;--panel2:#211936;--line:#42335b;--text:#f7f3ff;--muted:#bdb2cd;--teal:#3be6e2;--pink:#f84ec7;--purple:#bc91fa;--red:#ff7795;--gold:#f2c478;--green:#78e1af}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 85% -5%,#4d195980,transparent 42%),radial-gradient(ellipse at 0% 85%,#114c5360,transparent 42%),var(--bg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--text)}
+button,input,select{font:inherit}
+button{cursor:pointer}
+button:disabled{opacity:.4;cursor:not-allowed}
+a{color:var(--teal)}
+:focus-visible{outline:3px solid var(--teal);outline-offset:3px}
+.hidden{display:none!important}
+.shell{max-width:1210px;margin:0 auto;padding:22px 20px 65px}
+header{display:flex;align-items:center;justify-content:space-between;gap:15px;border-bottom:1px solid var(--line);padding:0 0 20px}
+.brand{display:flex;align-items:center;gap:12px;font-size:20px;font-weight:900;letter-spacing:.015em}
+.brand-logo{width:48px;height:48px;display:grid;place-items:center;background:linear-gradient(145deg,#7c32a8,#342451);border-radius:14px;border:1px solid #c768f588;font-size:26px}
+.brand small{display:block;color:var(--muted);font-size:11px;letter-spacing:.11em;text-transform:uppercase}
+.brand b{color:var(--pink)}
+.top-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:#21172e;color:var(--muted);font-size:12px}
+.chip::before{content:"";background:var(--gold);border-radius:50%;width:7px;height:7px}
+.chip.ready::before{background:var(--green)}.chip.danger::before{background:var(--red)}
+button.ghost{background:#231b37;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+button.ghost:hover{border-color:var(--teal)}
+h1{font-size:clamp(28px,4.5vw,45px);margin:29px 0 8px;letter-spacing:-.04em;line-height:1.12}
+h1 span{color:var(--teal)}
+.lead{color:var(--muted);font-size:16px;max-width:780px;margin:0 0 26px}
+.card{background:linear-gradient(150deg,#221831,#161224);border:1px solid var(--line);border-radius:19px;padding:24px}
+.card h2{font-size:20px;margin:0 0 8px}.card h3{font-size:16px;margin:0 0 12px}
+.muted{color:var(--muted)}.small{font-size:12px;color:var(--muted)}
+.grid-two{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}
+.grid-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:0 0 20px}
+.stat{background:#1b152d;border:1px solid var(--line);border-radius:14px;padding:18px}
+.stat strong{display:block;font-size:32px;line-height:1.2;letter-spacing:-.04em}
+.stat small{color:var(--muted)}
+.stat:nth-child(1) strong{color:var(--teal)}.stat:nth-child(2) strong{color:var(--gold)}
+.form-row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+label{display:block;color:#e7ddec;font-weight:650;font-size:13px;margin:0 0 7px}
+label .optional{font-weight:400;color:var(--muted)}
+.field{margin:0 0 16px;min-width:0}
+.field.grow{flex:1;min-width:190px}
+input,select{width:100%;background:#100d1e;border:1px solid #58466c;color:var(--text);border-radius:10px;padding:12px;min-height:45px}
+input::placeholder{color:#9e91b6}
+input:focus,select:focus{outline:2px solid var(--teal);outline-offset:1px}
+.btn{border:0;border-radius:10px;padding:11px 17px;min-height:45px;font-weight:800;background:linear-gradient(110deg,#29ddd7,#86f3ec);color:#06242b}
+.btn.secondary{background:#543068;color:#fff;border:1px solid #9760af}
+.btn.warn{background:#49243c;color:#ffaccc;border:1px solid #9a4c72}
+.btn.smallbtn{padding:7px 10px;min-height:34px;font-size:12px}
+.actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+pre{border:1px solid #5e4774;background:#100c1d;border-radius:12px;padding:16px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.55 ui-monospace,Consolas,monospace;color:#d7cbe6}
+.mini-code{padding:6px 9px;background:#080616;border-radius:8px;font:12px ui-monospace,monospace;word-break:break-all}
+.notice{padding:14px 16px;border:1px solid #77613d;background:#3b2b2099;color:#f1d9ae;border-radius:12px;margin:18px 0}
+.notice.ok{border-color:#1d817e;color:#cbffff;background:#12404477}
+.notice.error{border-color:#ae3f69;color:#ffe1eb;background:#55243877}
+#flash{position:sticky;top:12px;z-index:10;margin:14px 0}
+#flash:empty{display:none}
+#flash>div{border:1px solid var(--teal);background:#173333;color:#e6ffff;padding:11px 15px;border-radius:10px}
+#flash>div.error{border-color:var(--red);background:#3d2335;color:#ffe0ee}
+.steps{padding:0;list-style:none;counter-reset:s}
+.steps li{counter-increment:s;display:grid;grid-template-columns:30px 1fr;gap:10px;margin:0 0 19px;color:var(--muted)}
+.steps li::before{content:counter(s);width:29px;height:29px;border-radius:8px;background:#3d2855;color:var(--teal);display:grid;place-items:center;font-weight:800}
+.steps b{display:block;color:var(--text)}
+.sec-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:26px 0 15px}
+.sec-header h2{margin:0;font-size:22px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:10px 0 20px}
+.tabs button{border:0;background:transparent;color:var(--muted);font-weight:800;padding:11px 16px;border-radius:10px 10px 0 0}
+.tabs button[aria-selected=true]{color:#111523;background:var(--teal)}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px}
+table{width:100%;border-collapse:collapse;min-width:700px}
+th,td{text-align:left;padding:13px 14px;border-bottom:1px solid #3b2d50}
+th{background:#241b35;color:#bdb5ce;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+td{font-size:14px}
+tr:last-child td{border-bottom:0}
+.member-name{font-weight:800}.member-email{font-size:12px;color:var(--muted)}
+.state{display:inline-block;border:1px solid #5d4770;border-radius:999px;padding:4px 9px;font-size:12px;text-transform:capitalize}
+.state.active{color:var(--green);border-color:#477960}
+.state.pending{color:var(--gold);border-color:#9e7d41}
+.state.paused{color:#e3b5ff;border-color:#77539b}
+.state.revoked,.state.denied{color:var(--red);border-color:#a34e70}
+.empty{padding:33px 16px;text-align:center;color:var(--muted)}
+.toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:12px 0}
+.toolbar input{max-width:360px}
+.info-block{border-left:4px solid var(--pink);padding:12px 16px;background:#321b34;border-radius:8px;margin:14px 0;color:#e6d5f2}
+footer{margin-top:36px;border-top:1px solid var(--line);padding-top:16px;color:#a99ab8;font-size:12px}
+@media(max-width:850px){.grid-two{grid-template-columns:1fr}.grid-stats{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:530px){.shell{padding:14px 12px 50px}.card{padding:17px}.brand{font-size:16px}.brand-logo{height:41px;width:41px}.top-actions{gap:5px}.grid-stats{gap:8px}.stat{padding:11px}.stat strong{font-size:26px}}
+</style>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.min.js"></script>
+<script defer src="./admin.js"></script>
+</head>
+<body>
+<div class="shell">
+<header>
+  <div class="brand"><div class="brand-logo" aria-hidden="true">🐼</div><div>Panda Tv <b>Elite</b><small>Private Owner Console</small></div></div>
+  <div class="top-actions"><span class="chip" id="connectionStatus">Not connected</span><button class="ghost hidden" id="signOutBtn" type="button">Sign out</button><a class="small" href="../">Main website</a></div>
+</header>
+<div id="flash" role="status" aria-live="polite"></div>
+<main>
+  <div id="intro"><h1>You're in <span>control.</span></h1><p class="lead">Decide exactly who can use Panda Tv Elite. Approve members, pause access, set expiration dates and prepare device limits — all from one place.</p></div>
+  <section id="connectionPanel" class="grid-two">
+    <div class="card">
+      <h2>Connect your private dashboard</h2>
+      <p class="muted">Your panel is built. It needs a private database to securely remember who you approve. Until connected, no approvals are active.</p>
+      <form id="connectionForm" autocomplete="off">
+        <div class="field"><label for="backendUrl">Supabase project URL</label><input id="backendUrl" type="url" placeholder="https://your-project.supabase.co" required spellcheck="false" autocomplete="off"></div>
+        <div class="field"><label for="backendKey">Publishable key (NOT a secret key)</label><input id="backendKey" type="text" placeholder="sb_publishable_..." required spellcheck="false" autocomplete="off"></div>
+        <button type="submit" class="btn">Connect database</button>
+      </form>
+      <div class="notice"><b>Privacy:</b> Never enter a Supabase secret key or service-role key here. This page accepts only a publishable client key. Owner permissions are enforced by database rules.</div>
+    </div>
+    <div class="card">
+      <h2>Three simple setup steps</h2>
+      <ol class="steps">
+        <li><span><b>Create a Supabase project.</b> This gives your app a private cloud database for approvals. <a href="https://supabase.com/dashboard/projects" target="_blank" rel="noopener">Open Supabase</a>.</span></li>
+        <li><span><b>Connect the project here.</b> Copy its URL and publishable key from Project Settings → API Keys.</span></li>
+        <li><span><b>Secure your owner account.</b> Sign in by email. Use the included database setup to make only your account an owner.</span></li>
+      </ol>
+      <p class="small">The same app can later connect to this database to check access when someone launches Panda Tv Elite.</p>
+    </div>
+  </section>
+  <section id="loginPanel" class="card hidden" style="max-width:650px">
+    <h2>Owner sign-in</h2>
+    <p class="muted">Enter your email. We'll send a one-time sign-in link through your Supabase project. A valid login alone is not enough: your account must also be on the owner allowlist.</p>
+    <form id="loginForm"><div class="field"><label for="loginEmail">Owner email</label><input id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email" required></div><button class="btn" type="submit">Email me a sign-in link</button></form>
+    <p class="small">If the email does not arrive, check Supabase Auth email settings. The project must allow redirects to this dashboard address.</p>
+    <button class="ghost" id="changeConnectionBtn" type="button">Change database connection</button>
+  </section>
+  <section id="ownerPendingPanel" class="card hidden" style="max-width:750px">
+    <h2>Owner approval needed</h2>
+    <p class="muted">You're signed in, but this account hasn't been designated as the owner yet. No members or access records are exposed.</p>
+    <p>Your account ID:</p>
+    <div class="form-row"><code class="mini-code" id="ownerUid">—</code><button class="ghost" type="button" id="copyUidBtn">Copy account ID</button></div>
+    <div class="info-block">In Supabase, run the included <b>schema.sql</b>, then authorize this account ID using the owner-setup SQL. Do not publish administrator passwords or service keys.</div>
+    <a href="./SETUP.md" target="_blank" rel="noopener">Open the owner setup guide</a>
+    <div class="actions" style="margin-top:18px"><button class="btn" type="button" id="verifyOwnerBtn">Check owner access again</button><button class="ghost" type="button" id="changeConnectionFromPending">Change connection</button></div>
+  </section>
+  <section id="dashboardPanel" class="hidden">
+    <div class="grid-stats" aria-label="Access overview">
+      <div class="stat"><strong id="countActive">0</strong><small>Active members</small></div>
+      <div class="stat"><strong id="countPending">0</strong><small>Pending requests</small></div>
+      <div class="stat"><strong id="countPaused">0</strong><small>Paused members</small></div>
+      <div class="stat"><strong id="countRevoked">0</strong><small>Revoked members</small></div>
+    </div>
+    <div class="notice">The owner panel controls the secure database. <b>Existing public PandaTV APKs are not restricted yet.</b> A new Android version must perform server authorization before access is actually enforced. Device limits shown here are settings, not enforced in the current APK.</div>
+    <div class="tabs" role="tablist" aria-label="Dashboard sections">
+      <button type="button" id="tabMembers" role="tab" aria-selected="true" aria-controls="membersSection">Members</button>
+      <button type="button" id="tabRequests" role="tab" aria-selected="false" aria-controls="requestsSection">Requests</button>
+      <button type="button" id="tabSetup" role="tab" aria-selected="false" aria-controls="settingsSection">Settings</button>
+    </div>
+    <section id="membersSection" role="tabpanel" aria-labelledby="tabMembers">
+      <div class="grid-two">
+        <div class="card">
+          <h2>Add someone you approve</h2>
+          <p class="small">Add their verified email to your private allowlist. Access will take effect once a future APK checks this backend.</p>
+          <form id="memberForm">
+            <div class="form-row">
+              <div class="field grow"><label for="memberName">Person's name</label><input id="memberName" type="text" required maxlength="80" placeholder="Example: Sam"></div>
+              <div class="field grow"><label for="memberEmail">Their email</label><input id="memberEmail" type="email" required maxlength="254" placeholder="sam@example.com"></div>
+            </div>
+            <div class="form-row">
+              <div class="field grow"><label for="memberDevices">Device limit</label><select id="memberDevices"><option value="1">1 device</option><option value="2" selected>2 devices</option><option value="3">3 devices</option><option value="4">4 devices</option><option value="5">5 devices</option></select></div>
+              <div class="field grow"><label for="memberExpiry">Expires on <span class="optional">(optional)</span></label><input id="memberExpiry" type="date"></div>
+            </div>
+            <button class="btn" type="submit" id="addMemberBtn">Approve this person</button>
+          </form>
+        </div>
+        <div class="card">
+          <h2>How approvals work</h2>
+          <p>Once the Android app is connected to this backend:</p>
+          <ol><li>A viewer signs in with their verified email.</li><li>Panda Tv Elite checks your list.</li><li>Only active, unexpired accounts are permitted to continue.</li><li>Pausing or revoking a member blocks their next authorization check.</li></ol>
+          <p class="small">The existing 2.0.1 APK is not currently connected to this access database. No streaming changes are being made by this dashboard.</p>
+        </div>
+      </div>
+      <div class="sec-header"><h2>Your approved people</h2><button class="ghost" id="refreshMembersBtn" type="button">Refresh</button></div>
+      <div class="toolbar"><input id="memberSearch" placeholder="Search name or email" aria-label="Search members"><span class="small" id="memberCountLabel">0 members</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Person</th><th>Status</th><th>Devices</th><th>Expiration</th><th>Controls</th></tr></thead><tbody id="memberRows"></tbody></table><div class="empty" id="memberEmpty">No members yet. Add your first approved person above.</div></div>
+    </section>
+    <section id="requestsSection" role="tabpanel" aria-labelledby="tabRequests" class="hidden">
+      <div class="sec-header"><h2>People requesting access</h2><button class="ghost" id="refreshRequestsBtn" type="button">Refresh</button></div>
+      <div class="card"><p class="muted">When the activation screen is added to a future Panda Tv Elite APK, viewer requests will appear here. You can approve or deny them individually.</p><div class="table-wrap"><table><thead><tr><th>Person</th><th>Requested</th><th>Status</th><th>Controls</th></tr></thead><tbody id="requestRows"></tbody></table><div class="empty" id="requestsEmpty">No access requests yet.</div></div></div>
+    </section>
+    <section id="settingsSection" role="tabpanel" aria-labelledby="tabSetup" class="hidden">
+      <div class="grid-two">
+        <div class="card">
+          <h2>Owner account</h2>
+          <p class="small">Signed-in email</p><p id="ownerEmailView">—</p>
+          <p class="small">Owner user ID</p><code class="mini-code" id="ownerUidView">—</code>
+          <p><button class="ghost" id="changeConnectionFromSettings" type="button">Disconnect backend</button></p>
+        </div>
+        <div class="card">
+          <h2>Access enforcement status</h2>
+          <p><span class="state pending">Android integration required</span></p>
+          <p class="muted">This dashboard securely stores member approvals once your Supabase project is connected. To restrict viewers, PandaTV itself needs a new build that verifies their identity and membership.</p>
+          <a href="./SETUP.md" target="_blank" rel="noopener">Read setup and security notes</a>
+        </div>
+      </div>
+    </section>
+  </section>
+</main>
+<footer>Owner account data is protected by your Supabase Authentication and Row Level Security configuration. The website files are publicly readable; approval records must never be stored in GitHub Pages. This is not a stream provider or playlist distributor.</footer>
+</div>
+</body>
+</html>
