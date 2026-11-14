@@ -1,0 +1,55 @@
+/* Panda Tv Elite 1.9.3: remote-focused/selected bottom-tab labels must remain readable.
+   Deliberately CSS-only: does not change navigation events, streaming or player code. */
+body #nav.nav > button.p295NavBtn.active,
+body #nav.nav > button.p295NavBtn[aria-current="page"],
+body #nav.nav > button.p295NavBtn.active:focus-visible,
+body #nav.nav > button.p295NavBtn.active.ptv-remote-focus {
+  color:#170925!important;
+  -webkit-text-fill-color:#170925!important;
+  opacity:1!important;
+  text-shadow:0 1px 0 #ffffff55!important;
+}
+body #nav.nav > button.p295NavBtn.active > span,
+body #nav.nav > button.p295NavBtn[aria-current="page"] > span,
+body #nav.nav > button.p295NavBtn.active.ptv-remote-focus > span {
+  color:#170925!important;
+  -webkit-text-fill-color:#170925!important;
+  opacity:1!important;
+  visibility:visible!important;
+  text-shadow:0 1px 0 #ffffff55!important;
+}
+/* A remote can focus a different destination without activating it. Keep its
+   label white on a purple background instead of using dark ink on the dark bar. */
+body #nav.nav > button.p295NavBtn:not(.active):focus-visible,
+body #nav.nav > button.p295NavBtn:not(.active).ptv-remote-focus {
+  color:#ffffff!important;
+  -webkit-text-fill-color:#ffffff!important;
+  background:linear-gradient(135deg,#5d3186,#43215f)!important;
+  opacity:1!important;
+}
+body #nav.nav > button.p295NavBtn:not(.active):focus-visible > span,
+body #nav.nav > button.p295NavBtn:not(.active).ptv-remote-focus > span {
+  color:#ffffff!important;
+  -webkit-text-fill-color:#ffffff!important;
+  opacity:1!important;
+  visibility:visible!important;
+}
+/* The separately injected Next/For You footer buttons use a dark background.
+   Keep their remote-focus labels white and visible without changing layout. */
+body #nav.nav > button.p170NavLink:focus-visible,
+body #nav.nav > button.p170NavLink.ptv-remote-focus,
+body #nav.nav > button.p34DiscoverNav:focus-visible,
+body #nav.nav > button.p34DiscoverNav.ptv-remote-focus {
+  color:#ffffff!important;
+  -webkit-text-fill-color:#ffffff!important;
+  opacity:1!important;
+}
+body #nav.nav > button.p170NavLink:focus-visible > span,
+body #nav.nav > button.p170NavLink.ptv-remote-focus > span,
+body #nav.nav > button.p34DiscoverNav:focus-visible > span,
+body #nav.nav > button.p34DiscoverNav.ptv-remote-focus > span {
+  color:inherit!important;
+  -webkit-text-fill-color:inherit!important;
+  opacity:1!important;
+  visibility:visible!important;
+}
