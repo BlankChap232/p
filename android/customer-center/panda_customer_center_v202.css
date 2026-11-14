@@ -1,0 +1,19 @@
+.pandaCc{max-width:1250px;margin:0 auto;padding:16px 22px 60px;color:#f8f4ff}
+.pandaCcTop{display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin:10px 0 20px}
+.pandaCcTop h1{font-size:clamp(23px,3vw,38px);margin:0;color:#fff}
+.pandaCcTop p{color:#bfb0d5;margin:0}
+.pandaCcAlert{background:#2c2039;border:1px solid #eac075;border-left:5px solid #eac075;padding:14px 16px;border-radius:12px;color:#f6d9a4;margin:0 0 18px}
+.pandaCcGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px}
+.pandaCcCard{border:1px solid #695083;background:linear-gradient(135deg,#261936,#16102a);border-radius:16px;padding:20px;margin-bottom:17px}
+.pandaCcCard h2{font-size:21px;color:#31e6df;margin:0 0 9px}
+.pandaCcCard h3{font-size:17px;margin-top:22px}
+.pandaCcMuted{color:#c2b5d2;line-height:1.45}
+.pandaCcCard label{display:block;font-size:14px;font-weight:700;color:#e9dbf8;margin:14px 0}
+.pandaCcCard input,.pandaCcCard select,.pandaCcCard textarea{display:block;width:100%;min-height:42px;padding:11px 12px;margin-top:6px;color:#fbf5ff;background:#110c22;border:1px solid #8d69aa;border-radius:10px;font:inherit}
+.pandaCcCard select:focus-visible,.pandaCcCard textarea:focus-visible,.pandaCcCard input:focus-visible{outline:2px solid #31e6df}
+.pandaCcDraft{padding:11px 0;border-bottom:1px solid #6e4c82}
+.pandaCcDraft:last-child{border-bottom:0}
+.pandaCcDraft b,.pandaCcDraft small{display:block}
+.pandaCcDraft small{color:#f4c7ed;margin-top:2px}
+.pandaCcDraft p{color:#d3c5df;white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0}
+@media(max-width:700px){.pandaCc{padding:12px 12px 48px}.pandaCcGrid{grid-template-columns:1fr}.pandaCcCard{padding:15px}}
