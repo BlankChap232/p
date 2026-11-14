@@ -98,11 +98,16 @@
       };
     } catch (_) { if (db) db.close(); finish(token, new Set(), 0, false); }
   }
-  function begin(raw) {
+  function begin(raw, force = false) {
     const next = clean(raw).slice(0, 140);
-    if (next === query && (indexing || indexFinished)) return;
+    if (!force && next === query && (indexing || indexFinished)) return;
     clearTimeout(inputTimer);
-    if (next.length < 2) { scan(next); return; }
+    // Immediately invalidate the old query and its results before the next
+    // grid redraw; stale EPG hits must never appear under a new keyword.
+    generation++;
+    query = next; results = new Set(); indexing = false; indexFinished = false;
+    scanned = 0; indexedHits = 0;
+    if (next.length < 2) return;
     inputTimer = setTimeout(() => scan(next), 270);
   }
   const originalInput = window.p295GuideInput;
@@ -123,7 +128,7 @@
     const stamp = Number(window.PandaEPG200?.status?.().lastComplete || 0);
     if (stamp && stamp !== lastSourceStamp) {
       lastSourceStamp = stamp;
-      begin(guide.query);
+      begin(guide.query, true);
     }
   }, 45000);
   window.PandaGuideSearch203 = Object.freeze({
