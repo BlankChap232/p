@@ -1,13 +1,16 @@
 {
   "schema": 1,
   "published": true,
-  "versionName": "2.0.1",
-  "applicationId": "com.pandatv.elitev301.elite201",
-  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v2.0.1-elite-channel-labels-public.1/PandaTV.apk",
-  "sizeBytes": 25475660,
-  "sha256": "ea49aeadc7999ff9de37b1042f79e4f748dda9eef22c2266aabfefcf9f875f38",
-  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v2.0.1-elite-channel-labels-public.1",
+  "versionName": "2.0.3",
+  "versionCode": 1889,
+  "applicationId": "com.pandatv.elitev301.elite203",
+  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v2.0.3-elite-standalone-search-login-public.1/PandaTV.apk",
+  "sizeBytes": 25479993,
+  "sha256": "9ba5767b571fe83789521521c349805c0a62ced57fbedd61a4c30ffc26de4c11",
+  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v2.0.3-elite-standalone-search-login-public.1",
   "channel": "owner-approved-public-elite",
   "launcherName": "Panda Tv Elite",
-  "installationNote": "Separately signed Android application identity; not an in-place update to earlier Elite versions"
+  "installationNote": "Separate Android package/signing identity from older builds; older apps do not upgrade in place. Installer asks for Android approval.",
+  "updatePolicy": "automatic-checks-with-user-approved-installs",
+  "signingNote": "Production signing key needs to be retained securely for future in-place updates; 2.0.3 QA signing key was ephemeral."
 }
