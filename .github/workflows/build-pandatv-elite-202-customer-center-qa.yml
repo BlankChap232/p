@@ -1,0 +1,170 @@
+name: Build Panda Tv Elite 2.0.2 Customer Center QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-pandatv-elite-202-customer-center-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact owner-approved working 2.0.1 APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p base
+          gh release download v2.0.1-elite-channel-labels-public.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir base
+          echo 'ea49aeadc7999ff9de37b1042f79e4f748dda9eef22c2266aabfefcf9f875f38  base/PandaTV.apk' | sha256sum -c -
+      - name: Check customer UI syntax and local-draft behavior
+        run: |
+          set -euo pipefail
+          node --check android/customer-center/panda_customer_center_v202.js
+          node - <<'JS'
+          let clickHandler=null;
+          const data={};
+          const elements={
+            pandaCcEmail:{value:'customer@example.com'},
+            pandaCcTopic:{value:'TV Guide / EPG'},
+            pandaCcUrgency:{value:'High'},
+            pandaCcBody:{value:'Programs do not appear for my channel'},
+            pandaCcReferralNote:{value:'Sent the installer link to a friend'},
+            pandaCcReferralType:{value:'Friend or family'},
+            pandaCcDraftHistory:{innerHTML:''}
+          };
+          global.window=global;
+          global.localStorage={getItem:(k)=>data[k]||null,setItem:(k,v)=>data[k]=v};
+          global.document={addEventListener:(e,fn)=>{if(e==='click')clickHandler=fn},getElementById:(k)=>elements[k]||null};
+          require('./android/customer-center/panda_customer_center_v202.js');
+          const app=global.PandaCustomerCenter202;
+          if(!app||!app.render().includes('Owner messaging not connected'))throw Error('Missing explicit offline warning');
+          if((app.render().match(/<select/g)||[]).length<3)throw Error('Missing dropdown controls');
+          function act(action){clickHandler({target:{closest:()=>({getAttribute:()=>action})},preventDefault(){}})}
+          act('draft-ticket');
+          act('draft-referral');
+          if(app.load().tickets.length!==1||app.load().referrals.length!==1)throw Error('Local-only draft storage failed');
+          if(app.load().tickets[0].urgency!=='High')throw Error('Dropdown value not retained');
+          console.log('Customer Center QA passed: three dropdowns, local-only tickets and referral notes');
+          JS
+      - name: Add UI only, never modify existing Media3 or decoder libraries
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from zipfile import ZipFile,ZipInfo,ZIP_DEFLATED
+          from pathlib import Path
+          from hashlib import sha256
+          src=Path('base/PandaTV.apk')
+          out=Path('PandaTV-unsigned.apk')
+          js=Path('android/customer-center/panda_customer_center_v202.js').read_bytes()
+          css=Path('android/customer-center/panda_customer_center_v202.css').read_bytes()
+          with ZipFile(src) as z:
+            assert z.testzip() is None
+            contents={n:z.read(n) for n in z.namelist()}
+            html=contents['assets/pandatv.html'].decode('utf-8')
+            route="else if(state.route==='settings')h=settings();"
+            assert html.count(route)==1
+            html=html.replace(route,route+"else if(state.route==='customer')h=window.PandaCustomerCenter202?.render?.()||'<p>Customer Center unavailable</p>';",1)
+            home="""<div class="quickTile pink" onclick="go('settings')"><i>⚙</i>Settings</div>"""
+            assert html.count(home)==1
+            html=html.replace(home,home+"""<div class="quickTile" onclick="go('customer')"><i>✉</i>Support & Referrals</div>""",1)
+            settings="""<div class="settingsGrid">"""
+            assert html.count(settings)==1
+            html=html.replace(settings,"""<div style="margin:8px 0 15px"><button class="btn primary" type="button" onclick="go('customer')">Customer Service & Referrals</button></div>"""+settings,1)
+            assert html.count('</body>')==1
+            html=html.replace('</body>','<link rel="stylesheet" href="panda_customer_center_v202.css"><script src="panda_customer_center_v202.js"></script></body>')
+            contents['assets/pandatv.html']=html.encode('utf-8')
+            old='com.pandatv.elitev301.elite201'.encode('utf-16le')
+            new='com.pandatv.elitev301.elite202'.encode('utf-16le')
+            assert len(old)==len(new)
+            mf=contents['AndroidManifest.xml']
+            assert mf.count(old)>0
+            contents['AndroidManifest.xml']=mf.replace(old,new)
+            contents['assets/panda_customer_center_v202.js']=js
+            contents['assets/panda_customer_center_v202.css']=css
+            original=set(z.namelist())
+            with ZipFile(out,'w') as target:
+              for inf in z.infolist():
+                n=inf.filename
+                if n=='META-INF/MANIFEST.MF' or n.startswith('META-INF/') and n.endswith(('.SF','.RSA','.DSA')):continue
+                zi=ZipInfo(n,inf.date_time)
+                zi.compress_type=inf.compress_type
+                zi.external_attr=inf.external_attr
+                zi.internal_attr=inf.internal_attr
+                zi.create_system=inf.create_system
+                zi.comment=inf.comment
+                target.writestr(zi,contents[n],compress_type=zi.compress_type,compresslevel=6)
+              for n in sorted(set(contents)-original):
+                target.writestr(n,contents[n],compress_type=ZIP_DEFLATED,compresslevel=6)
+          with ZipFile(src) as a,ZipFile(out) as b:
+            assert b.testzip() is None
+            dex=[n for n in a.namelist() if n.endswith('.dex')]
+            libs=[n for n in a.namelist() if n.endswith('.so')]
+            assert len(dex)==5 and len(libs)==10
+            for n in dex+libs:
+              assert sha256(a.read(n)).digest()==sha256(b.read(n)).digest(),n
+            assert 'assets/panda_epg_genie_v200.js' in b.namelist()
+            assert 'assets/panda_customer_center_v202.js' in b.namelist()
+            for n in a.namelist():
+              if n in {'AndroidManifest.xml','assets/pandatv.html'} or n.startswith('META-INF/'):continue
+              assert a.read(n)==b.read(n),'Unexpected modified asset '+n
+          print('Only frontend customer-center assets and QA package identity changed; all playback files identical')
+          PY
+      - name: Sign separate QA install and verify Android package
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/zipalign" -f -p 4 PandaTV-unsigned.apk PandaTV-aligned.apk
+          PASS="$(openssl rand -hex 24)"
+          keytool -genkeypair -noprompt -alias pandaqa -keyalg RSA -keysize 3072 -validity 365 \
+            -keystore "$RUNNER_TEMP/pandatv202.jks" -storepass "$PASS" -keypass "$PASS" \
+            -dname 'CN=Panda Tv Elite 2.0.2 Customer Center QA' >/dev/null 2>&1
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/pandatv202.jks" --ks-key-alias pandaqa \
+            --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --out PandaTvElite-2.0.2-CustomerCenter-QA.apk PandaTV-aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs PandaTvElite-2.0.2-CustomerCenter-QA.apk | tee signature.txt
+          "$BT/zipalign" -c -v 4 PandaTvElite-2.0.2-CustomerCenter-QA.apk > alignment.txt
+          "$BT/aapt" dump badging PandaTvElite-2.0.2-CustomerCenter-QA.apk | tee badging.txt | head -n 14
+          grep -q "^package: name='com.pandatv.elitev301.elite202'" badging.txt
+          grep -q "^application-label:'Panda Tv Elite'" badging.txt
+          sha256sum PandaTvElite-2.0.2-CustomerCenter-QA.apk > checksum.txt
+      - name: Publish separately installable public QA only, keeping official 2.0.1 live
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v2.0.2-elite-customer-center-qa.1
+        run: |
+          set -euo pipefail
+          cat > notes.md <<'NOTES'
+          # Panda Tv Elite 2.0.2 — Customer Center UI QA
+          
+          **PUBLIC TEST RELEASE ONLY — NOT THE OFFICIAL CUSTOMER ACCESS UPDATE.**
+          - Adds a Customer Service & Referrals screen linked from Home and Settings.
+          - Includes dropdowns for support category, urgency, and referral method.
+          - Local-only support drafts and referral notes; the UI explicitly says items have not been sent.
+          - **No live owner-console messaging, no active approval gate and no automatic referral rewards.** The required authenticated backend does not yet exist.
+          - All five player DEX files and ten native FFmpeg/Media3 libraries are byte-for-byte identical to approved 2.0.1. EPG Genie and all other app assets are unchanged.
+          
+          Install identity: `com.pandatv.elitev301.elite202`. This QA APK uses a separate testing certificate, so it installs alongside 2.0.1 and does not update it.
+          Keep the owner-approved public 2.0.1 release installed and in use while testing. Do not tell customers that activation is enforced with this build.
+          NOTES
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" PandaTvElite-2.0.2-CustomerCenter-QA.apk --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title 'Panda Tv Elite 2.0.2 — Customer Center UI QA' --prerelease --notes-file notes.md
+          else
+            gh release create "$TAG" PandaTvElite-2.0.2-CustomerCenter-QA.apk --repo "$GITHUB_REPOSITORY" --target main --prerelease --title 'Panda Tv Elite 2.0.2 — Customer Center UI QA' --notes-file notes.md
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PandaTvElite202-CustomerCenter-Audit
+          path: |
+            signature.txt
+            alignment.txt
+            badging.txt
+            checksum.txt
+          retention-days: 7
+          if-no-files-found: ignore
