@@ -1,0 +1,136 @@
+name: Build Panda Tv Elite 1.9.3 readable focused tabs QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-pandatv-elite-193-tabs-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download verified working 1.9.1 playback baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p baseline
+          gh release download v1.9.1-elite-navigation-qa.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV-TEST.apk --dir baseline
+          echo 'fade6a85c3398e14fc2766b38815fd443825dae4c66e3e8045714aeb6dc03da8  baseline/PandaTV-TEST.apk' | sha256sum -c -
+      - name: Apply CSS-only label fix to footer navigation
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from zipfile import ZipFile, ZipInfo
+          from pathlib import Path
+          import hashlib
+          src=Path('baseline/PandaTV-TEST.apk')
+          dst=Path('PandaTV-unsigned.apk')
+          path='assets/pandatv_elite_v191_polish.css'
+          patch=Path('release-patches/pandatv-elite-v193-focus-label.css').read_bytes()
+          assert b'p295NavBtn.active' in patch
+          assert b'ptv-remote-focus' in patch
+          assert b'-webkit-text-fill-color:#170925!important' in patch
+          oldid='com.pandatv.elitev301.elite191'.encode('utf-16le')
+          newid='com.pandatv.elitev301.elite193'.encode('utf-16le')
+          assert len(oldid)==len(newid)
+          with ZipFile(src) as old, ZipFile(dst,'w') as new:
+            assert old.testzip() is None
+            css=old.read(path)
+            assert b'Elite v1.9.1' in css and b'body .quickGrid' in css
+            assert patch not in css
+            for info in old.infolist():
+              name=info.filename
+              if name.startswith('META-INF/') and name.endswith(('.RSA','.SF','.DSA')):continue
+              if name=='META-INF/MANIFEST.MF':continue
+              data=old.read(name)
+              if name==path:
+                data+=b'\n\n'+patch
+              elif name=='AndroidManifest.xml':
+                assert data.count(oldid)>=1
+                data=data.replace(oldid,newid)
+              zi=ZipInfo(name,info.date_time)
+              zi.compress_type=info.compress_type
+              zi.external_attr=info.external_attr
+              zi.internal_attr=info.internal_attr
+              zi.create_system=info.create_system
+              zi.comment=info.comment
+              new.writestr(zi,data,compress_type=zi.compress_type,compresslevel=6)
+          with ZipFile(src) as old, ZipFile(dst) as new:
+            assert new.testzip() is None
+            decoders=[n for n in old.namelist() if n.endswith('.so')]
+            dex=[n for n in old.namelist() if n.endswith('.dex')]
+            assert len(decoders)==10,decoders
+            assert len(dex)==5,dex
+            assert b'Panda Tv Elite'.decode().encode('utf-16le') in new.read('AndroidManifest.xml')
+            for n in decoders+dex:
+              assert hashlib.sha256(old.read(n)).digest()==hashlib.sha256(new.read(n)).digest(),f'Player modified: {n}'
+            excepted={path,'AndroidManifest.xml'}
+            for n in old.namelist():
+              if n in excepted or n.startswith('META-INF/'):continue
+              assert old.read(n)==new.read(n),f'Unexpected file modified: {n}'
+          print('Verified CSS-only focused-label patch: all 5 DEX, all 10 .so and all unrelated assets unchanged')
+          PY
+      - name: Sign separately installable QA build
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/zipalign" -f -p 4 PandaTV-unsigned.apk PandaTV-aligned.apk
+          PASS="$(openssl rand -hex 24)"
+          keytool -genkeypair -noprompt -alias pandaqa -keyalg RSA -keysize 3072 -validity 365 \
+            -keystore "$RUNNER_TEMP/panda-elite-193-qa.jks" -storepass "$PASS" -keypass "$PASS" \
+            -dname 'CN=Panda Tv Elite Focus Tab QA Test' >/dev/null 2>&1
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/panda-elite-193-qa.jks" --ks-key-alias pandaqa \
+            --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --out PandaTV-TEST.apk PandaTV-aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs PandaTV-TEST.apk | tee apk-signature.txt
+          "$BT/zipalign" -c -v 4 PandaTV-TEST.apk > apk-alignment.txt
+          "$BT/aapt" dump badging PandaTV-TEST.apk | tee apk-badging.txt | head -n 16
+          grep -q "^package: name='com.pandatv.elitev301.elite193'" apk-badging.txt
+          grep -q "^application-label:'Panda Tv Elite'" apk-badging.txt
+          sha256sum PandaTV-TEST.apk > apk-sha256.txt
+      - name: Publish separate test APK without replacing approved public version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v1.9.3-elite-visible-tabs-qa.1
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # Panda Tv Elite 1.9.3 — Readable selected tabs
+          
+          **Test APK only.** Built directly from the user-confirmed working 1.9.1 QA APK. Does not use the withdrawn 1.9.2 channel-surfing build.
+          
+          - Selected Live, Movies, Series, My List and Account labels use high-contrast dark ink on their pink/purple/teal highlights.
+          - Keyboard/TV remote focus on an unselected tab uses white text against a dark purple background.
+          - Next and For You remote-focus labels remain white.
+          - The selected tab's icon and text stay visible; no new nav scrolling or input handling.
+          - All 5 DEX files, all 10 native Media3/FFmpeg libraries, playback and channel-surfing logic are **byte-for-byte identical** to the working 1.9.1 test.
+          
+          Android identity: `com.pandatv.elitev301.elite193`. Separately signed for safety; installs alongside 1.9.1, not as an update.
+          
+          Keep 1.9.1 until this build is tested on the TV. No actual stream playback was tested in GitHub Actions.
+          NOTES
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" PandaTV-TEST.apk --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease \
+              --title 'Panda Tv Elite 1.9.3 — Focused Tab Labels QA' --notes-file release-notes.md
+          else
+            gh release create "$TAG" PandaTV-TEST.apk --repo "$GITHUB_REPOSITORY" --target main --prerelease \
+              --title 'Panda Tv Elite 1.9.3 — Focused Tab Labels QA' --notes-file release-notes.md
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease,assets,url
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PandaTv-Elite-193-focused-nav-audit
+          path: |
+            apk-signature.txt
+            apk-badging.txt
+            apk-alignment.txt
+            apk-sha256.txt
+          retention-days: 7
+          if-no-files-found: ignore
