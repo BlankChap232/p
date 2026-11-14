@@ -1,0 +1,103 @@
+name: Publish Panda Tv Elite 2.0.3 Standalone to Public Latest
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-pandatv-elite-203-standalone-public.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve exact 2.0.3 search-and-login signed APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p approved
+          gh release download v2.0.3-elite-standalone-search-login-qa.1 --repo "$GITHUB_REPOSITORY" --pattern 'PandaTvElite-2.0.3-STANDALONE-SEARCH-TEST.apk' --dir approved
+          echo '9ba5767b571fe83789521521c349805c0a62ced57fbedd61a4c30ffc26de4c11  approved/PandaTvElite-2.0.3-STANDALONE-SEARCH-TEST.apk' | sha256sum -c -
+          cp approved/PandaTvElite-2.0.3-STANDALONE-SEARCH-TEST.apk PandaTV.apk
+          echo '9ba5767b571fe83789521521c349805c0a62ced57fbedd61a4c30ffc26de4c11  PandaTV.apk' | sha256sum -c -
+          test "$(stat -c%s PandaTV.apk)" = 25479993
+      - name: Audit package, update subsystem, signatures and native playback
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk | tee apk-signature.txt
+          "$BT/zipalign" -c -v 4 PandaTV.apk > apk-alignment.txt
+          "$BT/aapt" dump badging PandaTV.apk > apk-badging.txt
+          head -n 18 apk-badging.txt
+          grep -q "^package: name='com.pandatv.elitev301.elite203'" apk-badging.txt
+          grep -q "^application-label:'Panda Tv Elite'" apk-badging.txt
+          python3 - <<'PY'
+          import zipfile,hashlib
+          from pathlib import Path
+          data=Path('PandaTV.apk').read_bytes()
+          assert hashlib.sha256(data).hexdigest()=='9ba5767b571fe83789521521c349805c0a62ced57fbedd61a4c30ffc26de4c11'
+          with zipfile.ZipFile('PandaTV.apk') as z:
+              assert z.testzip() is None
+              names=z.namelist()
+              assert len([n for n in names if n.endswith('.dex')])==5
+              assert len([n for n in names if n.endswith('.so')])==10
+              for n in ['assets/pandatv_v2959_grid.js',
+                        'assets/panda_guide_search_v203.js',
+                        'assets/panda_compact_login_v203.js',
+                        'assets/panda_epg_genie_v200.js',
+                        'assets/panda_update_config_v185.json']:
+                  assert n in names,n
+              assert b'PandaUpdateManager' in z.read('classes4.dex')
+              assert b'openUpdateCenter' in z.read('classes4.dex')
+              assert b'PandaGuideSearch203' in z.read('assets/pandatv_v2959_grid.js')
+          print('Exact approved 2.0.3 APK, native updater present, EPG + Media3 decoders preserved')
+          PY
+          echo "SIGNING_CERTIFICATE"
+          "$BT/apksigner" verify --print-certs PandaTV.apk | grep '^Signer #1 certificate SHA-256 digest:'
+          echo "VERSION_CODE"
+          grep '^package:' apk-badging.txt
+      - name: Promote byte-identical APK to public latest without re-signing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v2.0.3-elite-standalone-search-login-public.1
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # Panda Tv Elite 2.0.3 — Public Standalone
+          
+          This is the **same signed 2.0.3 APK** from the publicly tested QA build, promoted byte-for-byte without rebuilding or re-signing.
+          
+          - Fast Live Guide search across channel names, channel numbers and the current/next 12h of saved EPG program titles and descriptions (e.g. "ravens").
+          - Compact three-field Xtream IPTV setup with password show/hide, always-available Edit Login button and automatic credential editor after provider rejection.
+          - Media3-only video playback, EPG Genie 2.0, compact TV remote guide, channel-surf titles and background playback recovery retained.
+          - **No owner-console permissions or Supabase customer sign-in**.
+          
+          The app includes a native update center and background update checks, but **Android requires user approval to install a downloaded APK**. The QA APK was signed with a one-time test certificate that was not preserved for future builds. Therefore in-place updates to future APKs are **not guaranteed** until a stable production signing certificate is configured and a matching package is released. Do not promise silent updates. A future stable-signing transition may require a one-time separate install and provider credential re-entry.
+          
+          Android package: `com.pandatv.elitev301.elite203` (installs alongside 2.0.1 and 2.0.2; does not migrate their data).
+          
+          File: `PandaTV.apk` · 25,479,993 bytes · SHA-256: `9ba5767b571fe83789521521c349805c0a62ced57fbedd61a4c30ffc26de4c11`.
+          
+          No playlists, user logins or provider credentials are bundled.
+          NOTES
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title 'Panda Tv Elite 2.0.3 — Public Standalone' --notes-file release-notes.md --draft=false --prerelease=false --latest
+          else
+            gh release create "$TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --target main --latest --title 'Panda Tv Elite 2.0.3 — Public Standalone' --notes-file release-notes.md
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease,assets,url
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PandaTv-Elite-203-Publication-Audit
+          path: |
+            apk-signature.txt
+            apk-badging.txt
+            apk-alignment.txt
+          retention-days: 30
+          if-no-files-found: ignore
