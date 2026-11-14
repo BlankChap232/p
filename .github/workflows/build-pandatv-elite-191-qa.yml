@@ -52,20 +52,8 @@ jobs:
           # Add the EPG title to the visible native header, not just Details.
           js=Path('patchwork/assets/pandatv_v2943_native_catalog.js')
           code=js.read_text()
-          old_title="""  const displayTitle=item.type==='live'
-    ? cleanField(item.name||'Live TV',125)+(ordinal?' · CH '+ordinal:'')
-    : cleanField(item.name||item.title||'Now playing',180);"""
-          new_title="""  // Put the verified show title in the visible native title strip.
-  let nowTitle='';
-  if(item.type==='live'&&typeof window.PandaProgramGuide172?.metadataFor==='function'){
-    try{const info=window.PandaProgramGuide172.metadataFor(richItem);
-      if(info?.start && info?.stop && info?.programTitle && info.programTitle!==item.name)
-        nowTitle=cleanField(info.programTitle,75);
-    }catch(_ignored){}
-  }
-  const displayTitle=item.type==='live'
-    ? cleanField(item.name||'Live TV',100)+(ordinal?' · CH '+ordinal:'')+(nowTitle?' — '+nowTitle:'')
-    : cleanField(item.name||item.title||'Now playing',180);"""
+          old_title="  const displayTitle=item.type==='live'\n    ? cleanField(item.name||'Live TV',125)+(ordinal?' · CH '+ordinal:'')\n    : cleanField(item.name||item.title||'Now playing',180);"
+          new_title="  // Put the verified show title in the visible native title strip.\n  let nowTitle='';\n  if(item.type==='live'&&typeof window.PandaProgramGuide172?.metadataFor==='function'){\n    try{const info=window.PandaProgramGuide172.metadataFor(richItem);\n      if(info?.start && info?.stop && info?.programTitle && info.programTitle!==item.name)\n        nowTitle=cleanField(info.programTitle,75);\n    }catch(_ignored){}\n  }\n  const displayTitle=item.type==='live'\n    ? cleanField(item.name||'Live TV',100)+(ordinal?' · CH '+ordinal:'')+(nowTitle?' — '+nowTitle:'')\n    : cleanField(item.name||item.title||'Now playing',180);"
           assert code.count(old_title)==1,'Visible EPG title source mismatch'
           js.write_text(code.replace(old_title,new_title))
           PY
