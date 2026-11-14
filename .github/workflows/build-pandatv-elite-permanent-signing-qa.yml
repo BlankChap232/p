@@ -1,0 +1,190 @@
+name: Build Panda Tv Elite permanent-signing QA
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: GitHub release holding the verified base PandaTV.apk
+        required: true
+        default: v2.0.3-elite-standalone-search-login-public.1
+        type: string
+      version_name:
+        description: Real Android version name (12 characters, e.g. 2.0.4-stable)
+        required: true
+        default: 2.0.4-stable
+        type: string
+      version_code:
+        description: Higher Android versionCode (first stable = 2040)
+        required: true
+        default: "2040"
+        type: string
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    env:
+      BASE_TAG: ${{ inputs.source_tag }}
+      RELEASE_VERSION: ${{ inputs.version_name }}
+      RELEASE_CODE: ${{ inputs.version_code }}
+      PANDA_PROD_KEYSTORE_B64: ${{ secrets.PANDA_PROD_KEYSTORE_B64 }}
+      PANDA_PROD_STORE_PASSWORD: ${{ secrets.PANDA_PROD_STORE_PASSWORD }}
+      PANDA_PROD_KEY_ALIAS: ${{ secrets.PANDA_PROD_KEY_ALIAS }}
+      PANDA_PROD_KEY_PASSWORD: ${{ secrets.PANDA_PROD_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse insecure or missing permanent signing credentials
+        run: |
+          set -euo pipefail
+          for name in PANDA_PROD_KEYSTORE_B64 PANDA_PROD_STORE_PASSWORD PANDA_PROD_KEY_ALIAS PANDA_PROD_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing private GitHub Actions secret $name. Follow docs/PANDA_RELEASE_UPDATES.md."
+              exit 1
+            fi
+          done
+          python3 - <<'PY'
+          import os,re
+          tag=os.environ['BASE_TAG']
+          name=os.environ['RELEASE_VERSION']
+          code=os.environ['RELEASE_CODE']
+          assert re.fullmatch(r'v[0-9A-Za-z._-]{4,105}',tag), 'Invalid release tag'
+          assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+-stable',name), 'Stable version name required'
+          assert len(name)==12,'Stable Android versionName must be 12 characters until full manifest rebuild'
+          assert code.isdigit() and int(code)>=2040 and int(code)<2100000000,'Bad versionCode'
+          print('Input validation passed; no key material printed')
+          PY
+      - name: Download verified base APK from this repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p verified
+          gh release download "$BASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir verified
+          test -s verified/PandaTV.apk
+          if [ "$BASE_TAG" = 'v2.0.3-elite-standalone-search-login-public.1' ]; then
+            echo '9ba5767b571fe83789521521c349805c0a62ced57fbedd61a4c30ffc26de4c11  verified/PandaTV.apk' | sha256sum -c -
+          fi
+      - name: Apply only package identity and Android version metadata
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,re,struct,zipfile,hashlib
+          from pathlib import Path
+          src=Path('verified/PandaTV.apk')
+          dst=Path('PandaTV-unsigned.apk')
+          new_code=int(os.environ['RELEASE_CODE'])
+          new_name=os.environ['RELEASE_VERSION']
+          with zipfile.ZipFile(src) as z:
+            assert z.testzip() is None
+            manifest=z.read('AndroidManifest.xml')
+            old_code=1889 if os.environ['BASE_TAG']=='v2.0.3-elite-standalone-search-login-public.1' else None
+            old_name='1.8.9-epgfix' if old_code else None
+            if old_code is None:
+              # For stable-to-stable builds, match supported 12-character version names.
+              names=re.findall(rb'(?:[0-9]\x00\.\x00){2}',manifest)
+              # Find in string pool without deserializing the entire manifest.
+              versions=[x for x in re.findall(rb'(?:[0-9.]+-stable)',b'')]
+              # AAPT supplies the exact old values in the next step on the runner.
+              import subprocess
+              sdk=os.getenv('ANDROID_HOME','/usr/local/lib/android/sdk')
+              bt=sorted(Path(sdk,'build-tools').iterdir(),key=lambda p:tuple(int(x) for x in re.findall(r'\d+',p.name)))[-1]
+              text=subprocess.check_output([str(bt/'aapt'),'dump','badging',str(src)],text=True)
+              first=text.splitlines()[0]
+              old_code=int(re.search(r"versionCode='(\d+)'",first).group(1))
+              old_name=re.search(r"versionName='([^']+)'",first).group(1)
+            assert new_code>old_code,'New code must exceed installed code'
+            name_o=old_name.encode('utf-16le')
+            name_n=new_name.encode('utf-16le')
+            assert len(name_o)==len(name_n) and manifest.count(name_o)==1, 'Version name patch unsafe'
+            manifest=manifest.replace(name_o,name_n,1)
+            old_int=struct.pack('<I',old_code)
+            new_int=struct.pack('<I',new_code)
+            assert manifest.count(old_int)==1, 'Android version code patch ambiguous'
+            manifest=manifest.replace(old_int,new_int,1)
+            old_pkg='com.pandatv.elitev301.elite203'.encode('utf-16le')
+            prod_pkg='com.pandatv.elitev301.elite204'.encode('utf-16le')
+            if old_pkg in manifest:
+              assert len(old_pkg)==len(prod_pkg)
+              manifest=manifest.replace(old_pkg,prod_pkg)
+            else:
+              assert prod_pkg in manifest,'Unexpected installed package identity'
+            with zipfile.ZipFile(dst,'w') as out:
+              for inf in z.infolist():
+                n=inf.filename
+                if n=='META-INF/MANIFEST.MF' or n.startswith('META-INF/') and n.endswith(('.SF','.RSA','.DSA')):
+                  continue
+                zi=zipfile.ZipInfo(n,inf.date_time)
+                zi.compress_type=inf.compress_type
+                zi.external_attr=inf.external_attr
+                zi.internal_attr=inf.internal_attr
+                zi.create_system=inf.create_system
+                zi.comment=inf.comment
+                out.writestr(zi,manifest if n=='AndroidManifest.xml' else z.read(n),compress_type=zi.compress_type,compresslevel=6)
+          with zipfile.ZipFile(src) as a,zipfile.ZipFile(dst) as b:
+            assert b.testzip() is None
+            dex=[n for n in a.namelist() if n.endswith('.dex')]
+            libs=[n for n in a.namelist() if n.endswith('.so')]
+            assert len(dex)==5 and len(libs)==10
+            for n in dex+libs:
+              assert hashlib.sha256(a.read(n)).digest()==hashlib.sha256(b.read(n)).digest(),n
+            assert b'PandaUpdateManager' in b.read('classes4.dex')
+            assert b'PandaGuideSearch203' in b.read('assets/pandatv_v2959_grid.js')
+          print('Verified byte-identical native playback code, EPG search, update center and native decoder libraries')
+          PY
+      - name: Sign with only GitHub Actions Secrets and verify package
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          KEY="$RUNNER_TEMP/pandatv-release-signing.p12"
+          printf '%s' "$PANDA_PROD_KEYSTORE_B64" | base64 --decode > "$KEY"
+          test -s "$KEY"
+          keytool -list -keystore "$KEY" -storepass "$PANDA_PROD_STORE_PASSWORD" -alias "$PANDA_PROD_KEY_ALIAS" >/dev/null
+          "$BT/zipalign" -f -p 4 PandaTV-unsigned.apk PandaTV-aligned.apk
+          "$BT/apksigner" sign --ks "$KEY" --ks-key-alias "$PANDA_PROD_KEY_ALIAS" \
+            --ks-pass env:PANDA_PROD_STORE_PASSWORD --key-pass env:PANDA_PROD_KEY_PASSWORD \
+            --out PandaTV.apk PandaTV-aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk > signature.txt
+          "$BT/zipalign" -c -v 4 PandaTV.apk > alignment.txt
+          "$BT/aapt" dump badging PandaTV.apk > badging.txt
+          grep -q "^package: name='com.pandatv.elitev301.elite204' versionCode='$RELEASE_CODE' versionName='$RELEASE_VERSION'" badging.txt
+          if [ "$BASE_TAG" != 'v2.0.3-elite-standalone-search-login-public.1' ]; then
+            "$BT/apksigner" verify --verbose --print-certs verified/PandaTV.apk > previous-signature.txt
+            sed -n 's/^.*Signer: certificate SHA-256 digest: //p' previous-signature.txt | sort -u > previous-cert.txt
+            sed -n 's/^.*Signer: certificate SHA-256 digest: //p' signature.txt | sort -u > current-cert.txt
+            diff -u previous-cert.txt current-cert.txt || { echo '::error::Signing identity changed; cannot update in place'; exit 1; }
+          fi
+          printf 'QA_SHA256=' > checksum.txt
+          sha256sum PandaTV.apk >> checksum.txt
+          grep '^package:' badging.txt
+          echo 'Signed with private GitHub Actions secrets; no public keystore'
+      - name: Publish test-only stable-channel APK without replacing public latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="v${RELEASE_VERSION}-qa.1"
+          cat > notes.md <<'NOTES'
+          # Panda Tv Elite permanent-signing QA
+          
+          This APK uses permanent Android package identity \`com.pandatv.elitev301.elite204\` and owner-controlled signing key stored in private GitHub Actions Secrets.
+          - It is a QA **prerelease**, not the latest public APK.
+          - It preserves Media3/FFmpeg player, 2.0.3 standalone EPG keyword search, compact provider login and native update center.
+          - It installs separately from the 2.0.3 public APK (different identity); provider credentials must be entered once.
+          - Owner must test the APK on real Android TV and phone before promotion to public latest.
+          - Future releases must use the SAME package identity and SAME signing key, and a higher versionCode. Android may ask to approve installation.
+          NOTES
+          gh release create "$TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --target main --prerelease \
+            --title "Panda Tv Elite $RELEASE_VERSION — Permanent Signing QA" --notes-file notes.md
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,assets,url
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PandaTv-Production-Signing-QA-Audit
+          path: |
+            signature.txt
+            alignment.txt
+            badging.txt
+            checksum.txt
+          retention-days: 14
+          if-no-files-found: ignore
