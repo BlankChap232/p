@@ -1,12 +1,13 @@
 {
   "schema": 1,
   "published": true,
-  "versionName": "Panda Tv Elite - approved compact guide",
-  "applicationId": "com.pandatv.elitev301.guide190",
-  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v1.8.9-elite-compact-guide.1/PandaTV.apk",
-  "sizeBytes": 25429186,
-  "sha256": "18e330f4110b4117f76223a936daf16de14e8e2fc2ab9a39fca5ca040cf054a8",
-  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v1.8.9-elite-compact-guide.1",
+  "versionName": "1.9.3",
+  "applicationId": "com.pandatv.elitev301.elite193",
+  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v1.9.3-elite-visible-tabs-public.1/PandaTV.apk",
+  "sizeBytes": 25467392,
+  "sha256": "e535444670aa495cdeb49f69c6ea6ebcb699aeb59e7b37327f7d5a7ac741729e",
+  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v1.9.3-elite-visible-tabs-public.1",
   "channel": "owner-approved-public-elite",
-  "launcherName": "Panda Tv Elite"
+  "launcherName": "Panda Tv Elite",
+  "installationNote": "Separate application ID and signing identity; not an in-place update to older Elite builds"
 }
