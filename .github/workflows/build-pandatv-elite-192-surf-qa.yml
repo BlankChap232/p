@@ -25,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p tools
-          BASE='https://github.com/baksmali/smali/releases/download/v3.0.10'
+          BASE='https://github.com/baksmali/smali/releases/download/3.0.10'
           curl --fail --location --retry 3 "$BASE/baksmali-3.0.10-fat-release.jar" -o tools/baksmali.jar
           curl --fail --location --retry 3 "$BASE/smali-3.0.10-fat-release.jar" -o tools/smali.jar
           echo '37ae4a41a8886e15c20b8362fa4250f96bbdb55e1a608199ad8b5dff068b588f  tools/baksmali.jar' | sha256sum -c -
