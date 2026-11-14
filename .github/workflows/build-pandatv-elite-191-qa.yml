@@ -18,9 +18,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release download v1.8.9-elite-compact-guide.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir .
-          echo '18e330f4110b4117f76223a936daf16de14e8e2fc2ab9a39fca5ca040cf054a8  PandaTV.apk' | sha256sum -c -
-          mv PandaTV.apk PandaTV-base.apk
+          mkdir -p downloaded
+          gh release download v1.8.9-elite-compact-guide.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir downloaded
+          echo '18e330f4110b4117f76223a936daf16de14e8e2fc2ab9a39fca5ca040cf054a8  downloaded/PandaTV.apk' | sha256sum -c -
+          mv downloaded/PandaTV.apk PandaTV-base.apk
       - name: Apply narrow interface-only patch without rebuilding Media3
         run: |
           set -euo pipefail
