@@ -51,15 +51,20 @@ jobs:
                   dest.parent.mkdir(parents=True,exist_ok=True)
                   dest.write_bytes(z.read(name))
           PY
-          # Google baksmali emits .registers for this synthetic callback, not .locals.
-          # Allocate two extra local v registers without touching parameter aliases.
+          # Normalize the supported .locals and .registers declaration styles
+          # in the callback without touching decoder or stream handling.
           python3 - <<'PY'
           from pathlib import Path
           p=Path('working/patch_surf_titles.py')
           s=p.read_text()
-          a=s.index('    local = re.search(',s.index('def patch_metadata'))
-          b=s.index('    iput = re.compile(',a)
-          new="""    local = re.search(r'(?m)^(\\s*\\.(?:locals|registers)\\s+)(\\d+)(\\s*)
+          s=s.replace("r'(?m)^(\\s*\\.locals\\s+)(\\d+)(\\s*)$'",
+                      "r'(?m)^(\\s*\\.(?:locals|registers)\\s+)(\\d+)(\\s*)$'")
+          s=s.replace("    if count < 3:", "    if count < (6 if '.registers' in local.group(1) else 3):")
+          s=s.replace(" + '3' + body[local.end(2):]",
+                      " + str(6 if '.registers' in local.group(1) else 3) + body[local.end(2):]")
+          p.write_text(s)
+          PY
+          java -jar tools/baksmali.jar disassemble working/classes4.dex -o working/smali
           python3 working/patch_surf_titles.py \
             working/smali/com/pandatv/iptv/NativePlayerActivity.smali \
             working/assets/panda_program_details_v172.js \
