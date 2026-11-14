@@ -1,0 +1,43 @@
+name: Audit Panda Tv Elite 2.0 channel title renderer
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/audit-pandatv-201-title.yml']
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disassemble only working 2.0 native channel-title methods
+        env:
+          GH_TOKEN: \${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p checked tools
+          gh release download v2.0.0-elite-epg-resume-qa.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTvElite-2.0-TEST.apk --dir checked
+          echo 'f9dc010cd14c34e8dde3631ed8061ca5f11f69297b64f1cf4b2d76db4d4077bf  checked/PandaTvElite-2.0-TEST.apk' | sha256sum -c -
+          curl -fsSL --retry 3 https://github.com/baksmali/smali/releases/download/3.0.10/baksmali-3.0.10-fat-release.jar -o tools/baksmali.jar
+          echo '37ae4a41a8886e15c20b8362fa4250f96bbdb55e1a608199ad8b5dff068b588f  tools/baksmali.jar' | sha256sum -c -
+          unzip -p checked/PandaTvElite-2.0-TEST.apk classes4.dex > checked/classes4.dex
+          java -jar tools/baksmali.jar disassemble checked/classes4.dex -o smali
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          for target in ['NativePlayerActivity','PandaCyberPlayerUI','PandaPlaybackRecovery']:
+              f=Path('smali/com/pandatv/iptv')/(target+'.smali')
+              print('=== CLASS',target,'===',len(f.read_text()) if f.exists() else 'missing')
+              if not f.exists():continue
+              s=f.read_text()
+              for line in s.splitlines():
+                  if line.startswith('.field') and any(q in line.lower() for q in ['title','channel','program','index','url','name','current']):
+                      print('FIELD',line[:260])
+              blocks=list(re.finditer(r'(?ms)^\.method\b[^\n]*\n.*?^\.end method',s))
+              print('METHODS:',*[m.group(0).splitlines()[0] for m in blocks],sep='\n')
+              for m in blocks:
+                  b=m.group(0);sig=b.splitlines()[0].lower()
+                  if any(k in sig for k in ['channel','update','render','overlay','title','switch','surf','detail','metadata','oncreate']):
+                      if len(b)>18000:b=b[:18000]+'\n[TRUNCATED]'
+                      print('\n--- BEGIN '+target+' '+b.splitlines()[0]+' ---\n'+b+'\n--- END ---\n')
+          PY
