@@ -93,8 +93,8 @@ jobs:
               if name.startswith('META-INF/') and name.endswith(('.RSA','.SF','.DSA')):continue
               content=Path(patches[name]).read_bytes() if name in patches else src.read(name)
               if name=='AndroidManifest.xml':
-                original=b'com.pandatv.elitev301.elite191'
-                new=b'com.pandatv.elitev301.elite192'
+                original='com.pandatv.elitev301.elite191'.encode('utf-16le')
+                new='com.pandatv.elitev301.elite192'.encode('utf-16le')
                 assert len(original)==len(new)
                 assert content.count(original)>=1
                 content=content.replace(original,new)
