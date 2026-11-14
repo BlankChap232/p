@@ -1,0 +1,94 @@
+name: Publish owner-approved Panda Tv Elite 1.9.3
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-pandatv-elite-193-owner-approved.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve the exact owner-approved 1.9.3 APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p approved
+          gh release download v1.9.3-elite-visible-tabs-qa.1 --repo "$GITHUB_REPOSITORY" --pattern 'PandaTV-TEST.apk' --dir approved
+          echo 'e535444670aa495cdeb49f69c6ea6ebcb699aeb59e7b37327f7d5a7ac741729e  approved/PandaTV-TEST.apk' | sha256sum -c -
+          cp approved/PandaTV-TEST.apk PandaTV.apk
+          echo 'e535444670aa495cdeb49f69c6ea6ebcb699aeb59e7b37327f7d5a7ac741729e  PandaTV.apk' | sha256sum -c -
+          test "$(stat -c%s PandaTV.apk)" = "25467392"
+      - name: Verify launcher name, signature, APK identity and integrity
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk | tee apk-signature.txt
+          "$BT/zipalign" -c -v 4 PandaTV.apk > apk-alignment.txt
+          "$BT/aapt" dump badging PandaTV.apk | tee apk-badging.txt | head -n 18
+          grep -q "^package: name='com.pandatv.elitev301.elite193'" apk-badging.txt
+          grep -q "^application-label:'Panda Tv Elite'" apk-badging.txt
+          python3 - <<'PY'
+          import zipfile,hashlib
+          from pathlib import Path
+          b=Path('PandaTV.apk').read_bytes()
+          assert hashlib.sha256(b).hexdigest()=='e535444670aa495cdeb49f69c6ea6ebcb699aeb59e7b37327f7d5a7ac741729e'
+          with zipfile.ZipFile('PandaTV.apk') as z:
+              assert z.testzip() is None
+              dex=[n for n in z.namelist() if n.endswith('.dex')]
+              libs=[n for n in z.namelist() if n.endswith('.so')]
+              assert len(dex)==5,dex
+              assert len(libs)==10,libs
+              assert 'assets/pandatv_elite_v191_polish.css' in z.namelist()
+              css=z.read('assets/pandatv_elite_v191_polish.css')
+              assert b'-webkit-text-fill-color:#170925!important' in css
+              assert b'ptv-remote-focus' in css
+          print('Exact approved 1.9.3 APK: five DEX, ten native decoders, focused-tab style patch')
+          PY
+      - name: Make the exact approved installer the public latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v1.9.3-elite-visible-tabs-public.1
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # Panda Tv Elite 1.9.3 — Owner-Approved Public Download
+
+          This is the **exact APK the owner tested and confirmed working perfectly**, promoted byte-for-byte from the validated 1.9.3 QA release. The APK was not rebuilt, re-signed, or modified for publication.
+
+          Features retained:
+          - The user-confirmed working 1.9.1 Media3/FFmpeg playback engine and channel-surfing behavior.
+          - Compact TV Guide, improved guide navigation and startup loading behavior.
+          - Home access to Live TV, Movies and Series.
+          - Readable tab labels when selected or highlighted with a TV remote, including Series, Movies, Live, My List and Account.
+          - No floating preview player. The withdrawn 1.9.2 native channel-title experiment is not included.
+
+          **Important installation/update note:** Android application ID is `com.pandatv.elitev301.elite193`. This approved build uses the distinct QA signing certificate and installs separately from previous Panda Tv Elite versions, not as an automatic in-place update. Keep any previous working installation until this one is confirmed. Future in-place updates require the same package identity and signing key. Google Play Protect warnings must be investigated, not bypassed.
+
+          File: `PandaTV.apk` · 25,467,392 bytes · SHA-256: `e535444670aa495cdeb49f69c6ea6ebcb699aeb59e7b37327f7d5a7ac741729e`.
+
+          This release does not include source files, playlists, provider credentials, or private signing keys.
+          NOTES
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title 'Panda Tv Elite 1.9.3 — Owner Approved' --notes-file release-notes.md --draft=false --prerelease=false --latest
+          else
+            gh release create "$TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --target main --latest --title 'Panda Tv Elite 1.9.3 — Owner Approved' --notes-file release-notes.md
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease,assets,url
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PandaTv-Elite-193-Publication-Audit
+          path: |
+            apk-signature.txt
+            apk-badging.txt
+            apk-alignment.txt
+          retention-days: 14
+          if-no-files-found: ignore
