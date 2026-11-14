@@ -73,7 +73,7 @@ jobs:
           
           **Important installation/update note:** Android application ID is `com.pandatv.elitev301.elite201`. This approved build uses the distinct QA signing certificate and installs separately from previous Panda Tv Elite versions, not as an automatic in-place update. Keep any previous working installation until this one is confirmed. Future in-place updates require the same package identity and signing key. Google Play Protect warnings must be investigated, not bypassed.
 
-          File: `PandaTV.apk` · 25,467,392 bytes · SHA-256: `ea49aeadc7999ff9de37b1042f79e4f748dda9eef22c2266aabfefcf9f875f38`.
+          File: `PandaTV.apk` · 25,475,660 bytes · SHA-256: `ea49aeadc7999ff9de37b1042f79e4f748dda9eef22c2266aabfefcf9f875f38`.
 
           This release does not include source files, playlists, provider credentials, or private signing keys.
           NOTES
