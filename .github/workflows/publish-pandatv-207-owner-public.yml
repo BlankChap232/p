@@ -1,0 +1,189 @@
+name: Publish Panda Tv Elite 2.0.7 owner-signed public
+on:
+  push:
+    branches: [main]
+    paths:
+      - releases/207/publish-trigger.json
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: pandatv-elite-207-public
+  cancel-in-progress: false
+
+jobs:
+  sign-and-publish:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      PANDA_PROD_KEYSTORE_B64: ${{ secrets.PANDA_PROD_KEYSTORE_B64 }}
+      PANDA_PROD_STORE_PASSWORD: ${{ secrets.PANDA_PROD_STORE_PASSWORD }}
+      PANDA_PROD_KEY_ALIAS: ${{ secrets.PANDA_PROD_KEY_ALIAS }}
+      PANDA_PROD_KEY_PASSWORD: ${{ secrets.PANDA_PROD_KEY_PASSWORD }}
+      BASE_TAG: v2.0.5-smart-guide-english-first-public.1
+      PUBLIC_TAG: v2.0.7-easy-navigation-public.1
+
+    steps:
+      - name: Checkout the complete release source
+        uses: actions/checkout@v4
+
+      - name: Check private signing credentials and verified patch bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in PANDA_PROD_KEYSTORE_B64 PANDA_PROD_STORE_PASSWORD PANDA_PROD_KEY_ALIAS PANDA_PROD_KEY_PASSWORD; do
+            if [ -z "$(printenv "$name")" ]; then
+              echo "::error::Missing private production signing secret: $name"
+              exit 1
+            fi
+          done
+          test -s releases/207/apply_delta207.py
+          test -s releases/207/validated_delta.tar.xz.b64
+          base64 -d releases/207/validated_delta.tar.xz.b64 > delta207.tar.xz
+          echo "d3d8faa9aaf7fc418634ded64866d409a7043c445a0c914c2ee56139b19fd6d9  delta207.tar.xz" | sha256sum -c -
+          python3 -m py_compile releases/207/apply_delta207.py
+          if gh release view "$PUBLIC_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Public release $PUBLIC_TAG already exists. Refusing overwrite."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Retrieve and verify exact owner-signed 2.0.5 production APK
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p original
+          gh release download "$BASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir original
+          echo "10c3e2a0d1c91a546050a7e861caefd1b50e004b79e1e51a7cd437965cb88a9e  original/PandaTV.apk" | sha256sum -c -
+          test "$(stat -c%s original/PandaTV.apk)" = 25536770
+
+      - name: Apply exact tested 2.0.7 performance and navigation changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 releases/207/apply_delta207.py --base original/PandaTV.apk --bundle delta207.tar.xz --out PandaTV-unsigned.apk --mode production
+          python3 - <<'PY'
+          import zipfile,subprocess,tempfile
+          with zipfile.ZipFile('PandaTV-unsigned.apk') as z:
+              assert z.testzip() is None
+              h=z.read('assets/pandatv.html')
+              assert b'panda_remote_nav_v207.js' in h and b'panda_perf_guard_v206.js' in h
+              for f in ('panda_remote_nav_v207.js','panda_perf_guard_v206.js','panda_smart_guide_v206.js','pandatv_v2959_grid.js'):
+                  with tempfile.NamedTemporaryFile(suffix='.js') as t:
+                      t.write(z.read('assets/'+f));t.flush()
+                      subprocess.run(['node','--check',t.name],check=True)
+          print('PASS: 2.0.7 UI assets and scripts verified')
+          PY
+
+      - name: Owner-sign APK and verify certificate matches public 2.0.5
+        shell: bash
+        run: |
+          set -euo pipefail
+          BT="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$BT/apksigner" && test -x "$BT/zipalign" && test -x "$BT/aapt"
+          KEY="$RUNNER_TEMP/pandatv-elite-owner-key.p12"
+          printf '%s' "$PANDA_PROD_KEYSTORE_B64" | base64 -d > "$KEY"
+          chmod 600 "$KEY"
+          test -s "$KEY"
+          keytool -list -keystore "$KEY" -storepass "$PANDA_PROD_STORE_PASSWORD" -alias "$PANDA_PROD_KEY_ALIAS" > /dev/null
+          "$BT/zipalign" -f -p 4 PandaTV-unsigned.apk PandaTV-aligned.apk
+          "$BT/apksigner" sign --ks "$KEY" --ks-key-alias "$PANDA_PROD_KEY_ALIAS" \
+            --ks-pass env:PANDA_PROD_STORE_PASSWORD --key-pass env:PANDA_PROD_KEY_PASSWORD \
+            --out PandaTV.apk PandaTV-aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk > signature-207.txt
+          "$BT/apksigner" verify --verbose --print-certs original/PandaTV.apk > signature-205.txt
+          "$BT/zipalign" -c -v 4 PandaTV.apk > alignment-207.txt
+          "$BT/aapt" dump badging PandaTV.apk > badging-207.txt
+          grep -q "^package: name='com.pandatv.elitev301.elite204' versionCode='2070' versionName='2.0.7-stable'" badging-207.txt
+          sed -n 's/^.*Signer: certificate SHA-256 digest: //p' signature-207.txt | sort -u > fingerprint-207.txt
+          sed -n 's/^.*Signer: certificate SHA-256 digest: //p' signature-205.txt | sort -u > fingerprint-205.txt
+          test -s fingerprint-207.txt && test -s fingerprint-205.txt
+          diff -u fingerprint-205.txt fingerprint-207.txt
+          sha256sum PandaTV.apk > checksum-207.txt
+          echo "PASS: signature, certificate compatibility, package and version code."
+
+      - name: Publish production 2.0.7 as public Latest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # Panda Tv Elite 2.0.7 — Easy Navigation & Performance
+
+          Approved production update with ZIP-code local channels, English-first Smart Guide and main ESPN grouping preserved.
+
+          - TV remote Down/Up focus fixes in long settings and login screens
+          - Right-side scroll rail with Up/Down controls and draggable indicator
+          - Consistent focus visibility; reduced navigation conflicts
+          - Smart Guide caching and smaller EPG redraws from the 2.0.6 performance updates
+          - Background EPG processing guards while watching Live TV
+          - Main U.S. channels prioritized; ESPN+ event feeds and international channels still accessible toward the back
+          - Existing media decoder libraries and native Media3 playback bytes unchanged
+
+          Built from the exact verified 2.0.5 public APK. Production signing certificate and Android application ID match public 2.0.5, with versionCode 2070 for customer-approved in-place updates.
+
+          User confirmed the 2.0.7 QA navigation experience worked on their device. Physical testing of this separate owner-signed artifact and exhaustive playback stability are not independently established. Android sideloaded updates require installation approval.
+          NOTES
+          if gh release view "$PUBLIC_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Public tag already exists. Refusing overwrite."
+            exit 1
+          fi
+          gh release create "$PUBLIC_TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+            --title "Panda Tv Elite 2.0.7 — Easy Navigation & Performance" --notes-file release-notes.md
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')" = "$PUBLIC_TAG"
+          echo "PASS: owner-signed APK is published as public latest."
+
+      - name: Update the public auto-update feed with the exact signed APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          p=Path('docs/version.json')
+          d=json.loads(p.read_text())
+          assert d['versionCode']==2050 and d['applicationId']=='com.pandatv.elitev301.elite204', 'Existing public feed not on expected 2.0.5; refusing overwrite'
+          apk=Path('PandaTV.apk')
+          tag='v2.0.7-easy-navigation-public.1'
+          d.update({
+              'schema':1,'published':True,
+              'versionName':'2.0.7','versionCode':2070,
+              'applicationId':'com.pandatv.elitev301.elite204',
+              'apkUrl':f'https://github.com/BlankChap232/p/releases/download/{tag}/PandaTV.apk',
+              'sizeBytes':apk.stat().st_size,
+              'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
+              'releaseNotesUrl':f'https://github.com/BlankChap232/p/releases/tag/{tag}',
+              'channel':'owner-approved-public-elite',
+              'launcherName':'Panda Tv Elite',
+              'installationNote':'Normal owner-signed update from public 2.0.5 with Android user approval.',
+              'updatePolicy':'automatic-checks-with-user-approved-installs',
+              'signingNote':'Permanent owner signing certificate verified against 2.0.5.'
+          })
+          p.write_text(json.dumps(d,indent=2)+'\n')
+          print('PASS: exact SHA256 and download URL stored in update feed')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/version.json
+          git commit -m "Publish Panda Tv Elite 2.0.7 public update feed"
+          git push origin HEAD:main
+
+      - name: Upload release verification audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PandaTV-Elite-207-Production-QA
+          path: |
+            signature-207.txt
+            signature-205.txt
+            alignment-207.txt
+            badging-207.txt
+            checksum-207.txt
+            release-notes.md
+          retention-days: 21
+          if-no-files-found: ignore
