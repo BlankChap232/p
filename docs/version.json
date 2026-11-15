@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "published": true,
-  "versionName": "2.0.7",
-  "versionCode": 2070,
+  "versionName": "2.0.11",
+  "versionCode": 2110,
   "applicationId": "com.pandatv.elitev301.elite204",
-  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v2.0.7-easy-navigation-public.1/PandaTV.apk",
-  "sizeBytes": 25545194,
-  "sha256": "c07a2ca64f33462afbda4b14506fcaa758a65801ece9e24d051d5efddaa29862",
-  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v2.0.7-easy-navigation-public.1",
+  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v2.0.11-complete-cable-guide-public.1/PandaTV.apk",
+  "sizeBytes": 25521731,
+  "sha256": "01a34139a612943f52a891216c3df4ca754f21ed266f71fd7b481a321f05004d",
+  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v2.0.11-complete-cable-guide-public.1",
   "channel": "owner-approved-public-elite",
   "launcherName": "Panda Tv Elite",
-  "installationNote": "Normal owner-signed update from public 2.0.5 with Android user approval.",
+  "installationNote": "Owner-signed in-place Android update from 2.0.5/2.0.7 with user approval.",
   "updatePolicy": "automatic-checks-with-user-approved-installs",
-  "signingNote": "Permanent owner signing certificate verified against 2.0.5."
+  "signingNote": "Verified permanent signing certificate matches published 2.0.7."
 }
