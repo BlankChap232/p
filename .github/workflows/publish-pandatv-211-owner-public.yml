@@ -1,0 +1,189 @@
+name: Publish Panda Tv Elite 2.0.11 owner-signed public
+on:
+  push:
+    branches: [main]
+    paths:
+      - releases/211/publish-trigger.json
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: pandatv-elite-211-public
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      PANDA_PROD_KEYSTORE_B64: ${{ secrets.PANDA_PROD_KEYSTORE_B64 }}
+      PANDA_PROD_STORE_PASSWORD: ${{ secrets.PANDA_PROD_STORE_PASSWORD }}
+      PANDA_PROD_KEY_ALIAS: ${{ secrets.PANDA_PROD_KEY_ALIAS }}
+      PANDA_PROD_KEY_PASSWORD: ${{ secrets.PANDA_PROD_KEY_PASSWORD }}
+      PUBLIC_TAG: v2.0.11-complete-cable-guide-public.1
+      BASE_TAG: v2.0.7-easy-navigation-public.1
+    steps:
+      - name: Checkout exact approved source
+        uses: actions/checkout@v4
+      - name: Check signed-release credentials and exact source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in PANDA_PROD_KEYSTORE_B64 PANDA_PROD_STORE_PASSWORD PANDA_PROD_KEY_ALIAS PANDA_PROD_KEY_PASSWORD; do
+            test -n "${!name:-}" || { echo "::error::Missing signing secret $name"; exit 1; }
+          done
+          test -s releases/211/apply_delta211.py
+          test -s releases/211/validated_delta.tar.xz.b64
+          python3 -m py_compile releases/211/apply_delta211.py
+          base64 --decode releases/211/validated_delta.tar.xz.b64 > panda211.tar.xz
+          echo '27f99283984a573e6bbea193dba33131696a4ac6bbf045a8444e6cd833205bef  panda211.tar.xz' | sha256sum -c -
+          tar -tJf panda211.tar.xz >/dev/null
+          test "$(git show HEAD:releases/211/publish-trigger.json | grep -c '2.0.11')" -ge 1
+          echo 'Verified exact user-tested 2.0.11 asset bundle and release inputs'
+      - name: Download byte-verified 2.0.7 permanent-owner-signed APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original
+          gh release download "$BASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir original
+          echo 'c07a2ca64f33462afbda4b14506fcaa758a65801ece9e24d051d5efddaa29862  original/PandaTV.apk' | sha256sum -c -
+      - name: Apply and verify all 2.0.11 tested changes without touching player
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 releases/211/apply_delta211.py --base original/PandaTV.apk --bundle panda211.tar.xz --out PandaTV-unsigned.apk
+          python3 - <<'PY'
+          import pathlib,subprocess,tempfile,zipfile
+          with zipfile.ZipFile('PandaTV-unsigned.apk') as z:
+              for name in ('panda_smart_guide_v206.js','panda_safe_setup_v208.js','panda_cable_guide_v209.js',
+                           'panda_remote_nav_v207.js','pandatv_v2959_grid.js','pandatv_v291_stability.js'):
+                  with tempfile.NamedTemporaryFile(suffix='.js') as f:
+                      f.write(z.read('assets/'+name));f.flush()
+                      subprocess.run(['node','--check',f.name],check=True)
+              html=z.read('assets/pandatv.html')
+              assert b'panda_guide_fit_v211.css' in html
+              assert b'panda_cable_guide_v209.js' in html
+              assert b'panda_safe_setup_v208.js' in html
+              assert b'buildRail();' not in z.read('assets/panda_remote_nav_v207.js')
+          print('PASS: 2.0.11 JavaScript syntax, 1,500 guide, on-demand libraries, no overlay scroll rail')
+          PY
+      - name: Permanently sign and verify in-place Android upgrade from 2.0.7
+        shell: bash
+        run: |
+          set -euo pipefail
+          BT="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$BT/apksigner" && test -x "$BT/zipalign" && test -x "$BT/aapt"
+          KEY="$RUNNER_TEMP/pandatv-owner-211.p12"
+          printf '%s' "$PANDA_PROD_KEYSTORE_B64" | base64 --decode > "$KEY"
+          chmod 600 "$KEY"
+          keytool -list -keystore "$KEY" -storepass "$PANDA_PROD_STORE_PASSWORD" -alias "$PANDA_PROD_KEY_ALIAS" >/dev/null
+          "$BT/zipalign" -f -p 4 PandaTV-unsigned.apk PandaTV-aligned.apk
+          "$BT/apksigner" sign --ks "$KEY" --ks-key-alias "$PANDA_PROD_KEY_ALIAS" \
+            --ks-pass env:PANDA_PROD_STORE_PASSWORD --key-pass env:PANDA_PROD_KEY_PASSWORD \
+            --out PandaTV.apk PandaTV-aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk > signature-211.txt
+          "$BT/apksigner" verify --verbose --print-certs original/PandaTV.apk > signature-207.txt
+          "$BT/zipalign" -c -v 4 PandaTV.apk > alignment-211.txt
+          "$BT/aapt" dump badging PandaTV.apk > badging-211.txt
+          grep -q "^package: name='com.pandatv.elitev301.elite204' versionCode='2110' versionName='2.0.11-final'" badging-211.txt
+          sed -n 's/^.*Signer: certificate SHA-256 digest: //p' signature-207.txt | sort -u > fingerprint-207.txt
+          sed -n 's/^.*Signer: certificate SHA-256 digest: //p' signature-211.txt | sort -u > fingerprint-211.txt
+          test -s fingerprint-207.txt && test -s fingerprint-211.txt
+          diff -u fingerprint-207.txt fingerprint-211.txt
+          sha256sum PandaTV.apk > checksum-211.txt
+          echo 'PASS: signature matches current production, versionCode increased, user-approved in-place upgrades supported'
+      - name: Publish exact owner-signed APK as public latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # Panda Tv Elite 2.0.11 — Complete Cable Guide
+
+          User-approved update to Panda Tv Elite with a 1,500-channel curated U.S. cable-style Live TV guide and separate More Channels pages. Includes ZIP-code local station prioritization, primary ESPN and sports near the front, movie/documentary/news/entertainment groupings, and extra ESPN+ or international feeds moved back. All provider channels remain searchable.
+
+          - Safe initial login: verify provider credentials, load Live TV first, keep editor open on rejected credentials.
+          - Movies and Series load on entry with category fallback and retry rather than overwhelming startup.
+          - Faster guide navigation and cached selections; background EPG processing reduced during playback.
+          - Removed overlapping wide side scrollbar; retained native guide scrollbar and remote navigation.
+          - Fixed TV-safe toolbar wrapping, search field clipping, and guide header overlap.
+          - Original Media3/FFmpeg DEX and shared library bytes preserved exactly from the public 2.0.7 APK.
+
+          Android application ID `com.pandatv.elitev301.elite204`, Android versionCode `2110`, versionName `2.0.11-final`. Uses the same permanent owner certificate as 2.0.7 for normal user-approved sideloaded updates; Android installation approval remains required. This production-signed artifact has automated verification. The owner reports that the separate 2.0.11 QA build worked on their device; this newly signed production artifact has not been separately device-tested.
+          NOTES
+          if gh release view "$PUBLIC_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo '::error::2.0.11 tag already exists; refusing replacement without human review.'
+            exit 1
+          fi
+          gh release create "$PUBLIC_TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+            --title 'Panda Tv Elite 2.0.11 — Complete Cable Guide' --notes-file release-notes.md
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)" = "$PUBLIC_TAG"
+          echo 'PASS: 2.0.11 publicly available as GitHub latest'
+      - name: Publish signed APK checksum and automatic update metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          path=Path('docs/version.json')
+          data=json.loads(path.read_text())
+          assert data['versionCode']==2070 and data['applicationId']=='com.pandatv.elitev301.elite204', 'Unexpected current version feed: refusing overwrite'
+          apk=Path('PandaTV.apk')
+          tag='v2.0.11-complete-cable-guide-public.1'
+          data.update({'schema':1,'published':True,'versionName':'2.0.11','versionCode':2110,
+              'applicationId':'com.pandatv.elitev301.elite204',
+              'apkUrl':f'https://github.com/BlankChap232/p/releases/download/{tag}/PandaTV.apk',
+              'sizeBytes':apk.stat().st_size,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
+              'releaseNotesUrl':f'https://github.com/BlankChap232/p/releases/tag/{tag}',
+              'channel':'owner-approved-public-elite','launcherName':'Panda Tv Elite',
+              'installationNote':'Owner-signed in-place Android update from 2.0.5/2.0.7 with user approval.',
+              'updatePolicy':'automatic-checks-with-user-approved-installs',
+              'signingNote':'Verified permanent signing certificate matches published 2.0.7.'})
+          path.write_text(json.dumps(data,indent=2)+'\n')
+          assert hashlib.sha256(apk.read_bytes()).hexdigest()==data['sha256']
+          print('PASS: signed APK checksum and download URL recorded in update feed')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/version.json
+          git commit -m 'Publish Panda Tv Elite 2.0.11 public update feed'
+          git push origin HEAD:main
+      - name: Retain production certificate and release QA audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PandaTV-211-Production-Audit
+          path: |
+            badging-211.txt
+            signature-211.txt
+            signature-207.txt
+            alignment-211.txt
+            checksum-211.txt
+            release-notes.md
+          if-no-files-found: ignore
+          retention-days: 30
+  publish_pages:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - name: Deploy latest official download website
+        id: deployment
+        uses: actions/deploy-pages@v4
