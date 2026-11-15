@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "published": true,
-  "versionName": "2.0.3",
-  "versionCode": 1889,
-  "applicationId": "com.pandatv.elitev301.elite203",
-  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v2.0.3-elite-standalone-search-login-public.1/PandaTV.apk",
-  "sizeBytes": 25479993,
-  "sha256": "9ba5767b571fe83789521521c349805c0a62ced57fbedd61a4c30ffc26de4c11",
-  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v2.0.3-elite-standalone-search-login-public.1",
+  "versionName": "2.0.5",
+  "versionCode": 2050,
+  "applicationId": "com.pandatv.elitev301.elite204",
+  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v2.0.5-smart-guide-english-first-public.1/PandaTV.apk",
+  "sizeBytes": 25536770,
+  "sha256": "10c3e2a0d1c91a546050a7e861caefd1b50e004b79e1e51a7cd437965cb88a9e",
+  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v2.0.5-smart-guide-english-first-public.1",
   "channel": "owner-approved-public-elite",
   "launcherName": "Panda Tv Elite",
-  "installationNote": "Separate Android package/signing identity from older builds; older apps do not upgrade in place. Installer asks for Android approval.",
+  "installationNote": "One-time separate install from public 2.0.3; owner-signed 2.0.4-stable can upgrade in place.",
   "updatePolicy": "automatic-checks-with-user-approved-installs",
-  "signingNote": "Production signing key needs to be retained securely for future in-place updates; 2.0.3 QA signing key was ephemeral."
+  "signingNote": "Permanent owner signing identity; matches 2.0.4-stable QA."
 }
