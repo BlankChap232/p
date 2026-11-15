@@ -1,0 +1,167 @@
+name: Publish Panda Tv Elite 2.0.5 Smart Guide Public
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-pandatv-smartguide-205-public.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: panda-205-public
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    env:
+      PANDA_PROD_KEYSTORE_B64: ${{ secrets.PANDA_PROD_KEYSTORE_B64 }}
+      PANDA_PROD_STORE_PASSWORD: ${{ secrets.PANDA_PROD_STORE_PASSWORD }}
+      PANDA_PROD_KEY_ALIAS: ${{ secrets.PANDA_PROD_KEY_ALIAS }}
+      PANDA_PROD_KEY_PASSWORD: ${{ secrets.PANDA_PROD_KEY_PASSWORD }}
+      TAG: v2.0.5-smart-guide-english-first-public.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require owner signing secrets
+        run: |
+          set -euo pipefail
+          for k in PANDA_PROD_KEYSTORE_B64 PANDA_PROD_STORE_PASSWORD PANDA_PROD_KEY_ALIAS PANDA_PROD_KEY_PASSWORD; do
+            test -n "${!k:-}" || { echo "::error::Missing private signing secret: $k"; exit 1; }
+          done
+      - name: Retrieve verified source APK and owner-signed 2.0.4
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p base prior
+          gh release download v2.0.3-elite-standalone-search-login-public.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir base
+          echo '9ba5767b571fe83789521521c349805c0a62ced57fbedd61a4c30ffc26de4c11  base/PandaTV.apk' | sha256sum -c -
+          gh release download v2.0.4-stable-qa.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir prior
+          echo 'baaeef2874717993886d3faf61fc8ee176843325e90e18158d0e9fbe09300874  prior/PandaTV.apk' | sha256sum -c -
+      - name: Extract and test pinned English-First Smart Guide source
+        run: |
+          set -euo pipefail
+          base64 --decode release-patches/pandatv-smartguide205-production-source.tar.xz.b64 > source.tar.xz
+          echo 'f13422d3645f5c1f56bb18954ee8671d564ff2b3dac4160f3f7e6571020433d7  source.tar.xz' | sha256sum -c -
+          tar -xJf source.tar.xz
+          node --check android/smartguide205/panda_smart_guide_v205.js
+          node android/smartguide205/test_smart_guide_v205.cjs
+      - name: Patch guide only, preserving original player and EPG
+        run: |
+          set -euo pipefail
+          python3 android/smartguide205/apply_v205_patch.py --base base/PandaTV.apk --out PandaTV-unsigned.apk --source-dir android/smartguide205 --prod-identity
+          python3 - <<'PY'
+          import hashlib,zipfile,struct
+          with zipfile.ZipFile('base/PandaTV.apk') as a, zipfile.ZipFile('PandaTV-unsigned.apk') as b:
+              assert b.testzip() is None
+              for n in a.namelist():
+                  if n.endswith(('.dex','.so')):
+                      assert hashlib.sha256(a.read(n)).digest()==hashlib.sha256(b.read(n)).digest(),n
+              m=b.read('AndroidManifest.xml')
+              assert 'com.pandatv.elitev301.elite204'.encode('utf-16le') in m
+              assert '2.0.5-stable'.encode('utf-16le') in m
+              assert struct.pack('<I',2050) in m
+              assert b'PandaSmartGuide205' in b.read('assets/panda_smart_guide_v205.js')
+              assert b'PandaUpdateManager' in b.read('classes4.dex')
+          PY
+      - name: Sign and prove upgrade certificate matches 2.0.4
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BT="$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          KEY="$RUNNER_TEMP/owner-signing.p12"
+          printf '%s' "$PANDA_PROD_KEYSTORE_B64" | base64 --decode > "$KEY"
+          chmod 600 "$KEY"
+          keytool -list -keystore "$KEY" -storepass "$PANDA_PROD_STORE_PASSWORD" -alias "$PANDA_PROD_KEY_ALIAS" >/dev/null
+          "$BT/zipalign" -f -p 4 PandaTV-unsigned.apk aligned.apk
+          "$BT/apksigner" sign --ks "$KEY" --ks-key-alias "$PANDA_PROD_KEY_ALIAS" --ks-pass env:PANDA_PROD_STORE_PASSWORD --key-pass env:PANDA_PROD_KEY_PASSWORD --out PandaTV.apk aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk > signature205.txt
+          "$BT/apksigner" verify --verbose --print-certs prior/PandaTV.apk > signature204.txt
+          "$BT/zipalign" -c -v 4 PandaTV.apk > alignment205.txt
+          "$BT/aapt" dump badging PandaTV.apk > badging205.txt
+          "$BT/aapt" dump badging prior/PandaTV.apk > badging204.txt
+          grep -q "^package: name='com.pandatv.elitev301.elite204' versionCode='2050' versionName='2.0.5-stable'" badging205.txt
+          grep -q "^package: name='com.pandatv.elitev301.elite204' versionCode='2040' versionName='2.0.4-stable'" badging204.txt
+          sed -n 's/^.*Signer: certificate SHA-256 digest: //p' signature204.txt | sort -u > cert204.txt
+          sed -n 's/^.*Signer: certificate SHA-256 digest: //p' signature205.txt | sort -u > cert205.txt
+          test -s cert204.txt && test -s cert205.txt
+          diff -u cert204.txt cert205.txt
+          sha256sum PandaTV.apk > checksum205.txt
+      - name: Make 2.0.5 the latest public GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > notes.md <<'NOTES'
+          # Panda Tv Elite 2.0.5 — English-First Smart Guide
+          ZIP-code setup and nearby local affiliate prioritization; sorted U.S. English-first ESPN/sports, movies, documentaries, and entertainment. ESPN+ extra event feeds, international channels, and non-English channels move toward the back without removing anything. Retains guide search, favorites, EPG and Media3.
+          
+          This permanently owner-signed release uses Android package com.pandatv.elitev301.elite204 and versionCode 2050. It can update the owner-signed 2.0.4-stable build with user-approved installation. Public 2.0.3 has a different Android package and discarded QA signing key; it requires a one-time separate installation and reentering provider credentials.
+          
+          Automated code and signature checks pass; physical Android TV playback/navigation testing is not yet confirmed. Android installation requires user approval.
+          NOTES
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest --title 'Panda Tv Elite 2.0.5 — English-First Smart Guide' --notes-file notes.md
+          else
+            gh release create "$TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest --title 'Panda Tv Elite 2.0.5 — English-First Smart Guide' --notes-file notes.md
+          fi
+      - name: Refresh website download and updater metadata
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          f=Path('PandaTV.apk')
+          tag='v2.0.5-smart-guide-english-first-public.1'
+          data={
+            'schema':1,'published':True,'versionName':'2.0.5','versionCode':2050,
+            'applicationId':'com.pandatv.elitev301.elite204',
+            'apkUrl':f'https://github.com/BlankChap232/p/releases/download/{tag}/PandaTV.apk',
+            'sizeBytes':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest(),
+            'releaseNotesUrl':f'https://github.com/BlankChap232/p/releases/tag/{tag}',
+            'channel':'owner-approved-public-elite','launcherName':'Panda Tv Elite',
+            'installationNote':'One-time separate install from public 2.0.3; owner-signed 2.0.4-stable can upgrade in place.',
+            'updatePolicy':'automatic-checks-with-user-approved-installs',
+            'signingNote':'Permanent owner signing identity; matches 2.0.4-stable QA.'
+          }
+          Path('docs/version.json').write_text(json.dumps(data,indent=2)+'\n')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/version.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publish Panda Tv Elite 2.0.5 stable update metadata'
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Panda-205-Public-Release-Audit
+          path: |
+            signature205.txt
+            badging205.txt
+            checksum205.txt
+            alignment205.txt
+          retention-days: 30
+          if-no-files-found: ignore
+  publish_pages:
+    needs: release
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - name: Deploy updated official download website
+        id: deployment
+        uses: actions/deploy-pages@v4
