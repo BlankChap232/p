@@ -1,0 +1,8 @@
+{
+  "version": "2.0.11",
+  "approval": "Owner reported QA build works and requested public release",
+  "baseTag": "v2.0.7-easy-navigation-public.1",
+  "baseSha256": "c07a2ca64f33462afbda4b14506fcaa758a65801ece9e24d051d5efddaa29862",
+  "patchSha256": "27f99283984a573e6bbea193dba33131696a4ac6bbf045a8444e6cd833205bef",
+  "publicTag": "v2.0.11-complete-cable-guide-public.1"
+}
