@@ -1,0 +1,150 @@
+name: Publish Panda Tv Elite 2.0.15 owner-signed public
+on:
+  push:
+    branches: [main]
+    paths:
+      - releases/215/publish-trigger.json
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: panda-elite-215-public
+  cancel-in-progress: false
+jobs:
+  build-and-publish:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      PANDA_PROD_KEYSTORE_B64: ${{ secrets.PANDA_PROD_KEYSTORE_B64 }}
+      PANDA_PROD_STORE_PASSWORD: ${{ secrets.PANDA_PROD_STORE_PASSWORD }}
+      PANDA_PROD_KEY_ALIAS: ${{ secrets.PANDA_PROD_KEY_ALIAS }}
+      PANDA_PROD_KEY_PASSWORD: ${{ secrets.PANDA_PROD_KEY_PASSWORD }}
+      BASE_TAG: v2.0.11-complete-cable-guide-public.1
+      PUBLIC_TAG: v2.0.15-english-movies-public.1
+    steps:
+      - name: Checkout pinned release patch
+        uses: actions/checkout@v4
+      - name: Verify signing secret availability and release patch integrity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for k in PANDA_PROD_KEYSTORE_B64 PANDA_PROD_STORE_PASSWORD PANDA_PROD_KEY_ALIAS PANDA_PROD_KEY_PASSWORD; do
+            if [ -z "${!k:-}" ]; then echo "::error::Missing GitHub secret $k"; exit 1; fi
+          done
+          test -s releases/215/apply_delta215.py
+          test -s releases/215/validated_delta215.tar.xz.b64
+          base64 --decode releases/215/validated_delta215.tar.xz.b64 > delta215.tar.xz
+          echo '09902b16cbaeb37c027f4da3a0a509e4c32a34c7dcdf15db5296f03946fc28d5  delta215.tar.xz' | sha256sum -c -
+          python3 -m py_compile releases/215/apply_delta215.py
+          if gh release view "$PUBLIC_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo '::error::Public 2.0.15 tag already exists. Refusing to overwrite.'
+            exit 1
+          fi
+      - name: Fetch exact 2.0.11 owner-signed public APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p base
+          gh release download "$BASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir base
+          echo '01a34139a612943f52a891216c3df4ca754f21ed266f71fd7b481a321f05004d  base/PandaTV.apk' | sha256sum -c -
+          test "$(stat -c%s base/PandaTV.apk)" = 25521731
+      - name: Rebuild user-tested 2.0.15 movie and full-library fixes
+        run: |
+          set -euo pipefail
+          python3 releases/215/apply_delta215.py --base base/PandaTV.apk --bundle delta215.tar.xz --mode production --out PandaTV-unsigned.apk
+          python3 - <<'PY'
+          import zipfile,hashlib
+          with zipfile.ZipFile('base/PandaTV.apk') as base, zipfile.ZipFile('PandaTV-unsigned.apk') as final:
+            assert final.testzip() is None
+            for n in base.namelist():
+              if n.endswith(('.dex','.so')):
+                assert hashlib.sha256(base.read(n)).digest()==hashlib.sha256(final.read(n)).digest(),n
+            assert b'PandaFamily215' in final.read('assets/panda_family_catalog_v215.js')
+            assert b'PandaCableGuide209' in final.read('assets/panda_cable_guide_v209.js')
+            assert b'PandaUpdateManager' in final.read('classes4.dex')
+          print('PASS: full catalog before Home, adult filter, English releases first, Media3 unchanged')
+          PY
+      - name: Owner-sign and verify Android update compatibility
+        run: |
+          set -euo pipefail
+          BT="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$BT/apksigner" && test -x "$BT/zipalign" && test -x "$BT/aapt"
+          KEY="$RUNNER_TEMP/panda-elite-owner-215.p12"
+          printf '%s' "$PANDA_PROD_KEYSTORE_B64" | base64 --decode > "$KEY"
+          chmod 600 "$KEY"
+          keytool -list -keystore "$KEY" -storepass "$PANDA_PROD_STORE_PASSWORD" -alias "$PANDA_PROD_KEY_ALIAS" >/dev/null
+          "$BT/zipalign" -f -p 4 PandaTV-unsigned.apk PandaTV-aligned.apk
+          "$BT/apksigner" sign --ks "$KEY" --ks-key-alias "$PANDA_PROD_KEY_ALIAS" --ks-pass env:PANDA_PROD_STORE_PASSWORD --key-pass env:PANDA_PROD_KEY_PASSWORD --out PandaTV.apk PandaTV-aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk > signature-215.txt
+          "$BT/apksigner" verify --verbose --print-certs base/PandaTV.apk > signature-211.txt
+          "$BT/zipalign" -c -v 4 PandaTV.apk > alignment-215.txt
+          "$BT/aapt" dump badging PandaTV.apk > badging-215.txt
+          grep -q "^package: name='com.pandatv.elitev301.elite204' versionCode='2150' versionName='2.0.15-final'" badging-215.txt
+          sed -n 's/^.*Signer: certificate SHA-256 digest: //p' signature-215.txt | sort -u > cert-215.txt
+          sed -n 's/^.*Signer: certificate SHA-256 digest: //p' signature-211.txt | sort -u > cert-211.txt
+          test -s cert-215.txt && test -s cert-211.txt
+          diff -u cert-211.txt cert-215.txt
+          sha256sum PandaTV.apk | tee checksum-215.txt
+          echo 'PASS: certificate and application ID match current public 2.0.11'
+      - name: Publish verified 2.0.15 APK as latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > notes.md <<'NOTES'
+          # Panda Tv Elite 2.0.15 — English Movies & Complete Library
+
+          - English New Releases first, followed by All English Movies and Other Movies.
+          - Known explicit adult categories and titles hidden from regular movie/series browsing, search, and recommendations. Mislabeled provider items may still need correction.
+          - Live TV, Movies and Series fully loaded before Home opens; errors are reported rather than showing partial empty libraries.
+          - Preserves 1,500-channel main cable guide, More Channels, ZIP-based locals, remote navigation, and single scrollbar.
+          - Media3 and FFmpeg binaries unchanged from public 2.0.11.
+
+          Same permanent signing certificate and Android package as public 2.0.11; versionCode 2150 allows user-approved in-place updates. Owner confirmed the 2.0.15 QA build works. This newly owner-signed artifact has automated checks but has not been separately tested on a physical TV.
+          NOTES
+          if gh release view "$PUBLIC_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo '::error::Release already exists'; exit 1; fi
+          gh release create "$PUBLIC_TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest --title 'Panda Tv Elite 2.0.15 — English Movies & Complete Library' --notes-file notes.md
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')" = "$PUBLIC_TAG"
+      - name: Update public auto-update feed using exact signed APK digest
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          p=Path('docs/version.json')
+          d=json.loads(p.read_text())
+          assert d['versionCode']==2110 and d['applicationId']=='com.pandatv.elitev301.elite204','Unexpected prior public version'
+          apk=Path('PandaTV.apk');tag='v2.0.15-english-movies-public.1'
+          d.update({'schema':1,'published':True,'versionName':'2.0.15','versionCode':2150,
+            'applicationId':'com.pandatv.elitev301.elite204',
+            'apkUrl':f'https://github.com/BlankChap232/p/releases/download/{tag}/PandaTV.apk',
+            'sizeBytes':apk.stat().st_size,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
+            'releaseNotesUrl':f'https://github.com/BlankChap232/p/releases/tag/{tag}',
+            'channel':'owner-approved-public-elite','launcherName':'Panda Tv Elite',
+            'installationNote':'Owner-signed update from public 2.0.11 with user approval.',
+            'updatePolicy':'automatic-checks-with-user-approved-installs',
+            'signingNote':'Permanent owner certificate verified against 2.0.11.'})
+          p.write_text(json.dumps(d,indent=2)+'\n')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/version.json
+          git commit -m 'Publish Panda Tv Elite 2.0.15 update metadata'
+          git push origin HEAD:main
+      - name: Upload production verification audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PandaTV-215-Production-Audit
+          path: |
+            signature-215.txt
+            signature-211.txt
+            alignment-215.txt
+            badging-215.txt
+            checksum-215.txt
+            notes.md
+          retention-days: 21
+          if-no-files-found: ignore
