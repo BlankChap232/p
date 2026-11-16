@@ -1,0 +1,10 @@
+{
+  "release": "Panda Tv Elite 2.0.15",
+  "decision": "Owner approved publishing the working 2.0.15 QA build",
+  "source_qatest_sha256": "060b3c5ef367f036bf80d109f3d35b0b26c76cd1c8ba5a91c16c524c245c522e",
+  "source_release_tag": "v2.0.11-complete-cable-guide-public.1",
+  "source_base_sha256": "01a34139a612943f52a891216c3df4ca754f21ed266f71fd7b481a321f05004d",
+  "pinned_patch_sha256": "09902b16cbaeb37c027f4da3a0a509e4c32a34c7dcdf15db5296f03946fc28d5",
+  "publish_tag": "v2.0.15-english-movies-public.1",
+  "requested_on": "2026-11-15"
+}
