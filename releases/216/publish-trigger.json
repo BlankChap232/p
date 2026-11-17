@@ -1,0 +1,14 @@
+{
+  "release": "Panda Tv Elite 2.0.16 — Expanded Full-Height TV Guide",
+  "source_release": "v2.0.15-english-movies-public.1",
+  "target_release": "v2.0.16-full-height-guide-public.1",
+  "published_public_version_expected": "2.0.15",
+  "verified_user_tested_qa_sha256": "603a8bb242a8396d4585652b6ae2ca63a022a8e91d7cda79f068324da702e187",
+  "exact_guide_delta_sha256": "2b84c99431b5f751bd0794db8ebda18e6f3cc46aad49314a4418231bd369ecd2",
+  "base_qa_sha256": "060b3c5ef367f036bf80d109f3d35b0b26c76cd1c8ba5a91c16c524c245c522e",
+  "version_code": 2160,
+  "package_id": "com.pandatv.elitev301.elite204",
+  "signing": "production-only owner key in GitHub Actions Secrets; certificate must match 2.0.15",
+  "changes": "Show 8-10 channels with compact top controls and Guide Options; other app assets unchanged",
+  "owner_approval": "User confirmed 2.0.16 works and requested public release."
+}
