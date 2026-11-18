@@ -19,8 +19,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release download v2.0.16-full-height-guide-public.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk
-          echo '53c4a506b6619e598091f26d92f29201c856089471eebff2042a330f4e910211  PandaTV.apk' | sha256sum -c -
+          mkdir -p base
+          gh release download v2.0.16-full-height-guide-public.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir base
+          echo '53c4a506b6619e598091f26d92f29201c856089471eebff2042a330f4e910211  base/PandaTV.apk' | sha256sum -c -
       - name: Inspect compatible code anchors without modifying APK
         run: |
           python3 - <<'PY'
@@ -34,7 +35,7 @@ jobs:
                 'PandaCableGuide209','window.autoUpdateIfDue','window.smartSync','PandaUpdateManager',
                 'function restore','async function restore','function openDb','function sync','saveBatch',
                 'panda_nav_cache_v194.js']
-          with ZipFile('PandaTV.apk') as z:
+          with ZipFile('base/PandaTV.apk') as z:
             print('ZIP VALID:',z.testzip() is None)
             print('ALL DEX:',[(n,len(z.read(n))) for n in z.namelist() if n.endswith('.dex')])
             print('META:',[(n,len(z.read(n))) for n in z.namelist() if n.endswith('.so')])
