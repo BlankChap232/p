@@ -1,0 +1,73 @@
+name: QA Panda Tv Elite 2.0.17 back navigation and retained catalogs
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/build-pandatv-217-qa.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify pinned patch source and run behavior tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat releases/217/source.part0{0,1,2,3,4,5,6} > panda217.tar.xz.b64
+          base64 --decode panda217.tar.xz.b64 > panda217.tar.xz
+          echo 'd71febfe08f2d0904a86b3dde12a1561d21ff498fd048aed5c9b6b8b9fb5d5c2  panda217.tar.xz' | sha256sum -c -
+          mkdir -p panda217
+          tar -xJf panda217.tar.xz -C panda217
+          find panda217 -maxdepth 2 -type f -printf '%P %s bytes\n'
+          test -s panda217/apply_patch217.py
+          test -s panda217/panda_nav_cache_v194.js
+          node --check panda217/panda_nav_cache_v194.js
+          node panda217/test_panda_nav_cache_v194.cjs
+          python3 -m py_compile panda217/apply_patch217.py
+      - name: Download exact official production APK
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p base
+          gh release download v2.0.16-full-height-guide-public.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir base
+          echo '53c4a506b6619e598091f26d92f29201c856089471eebff2042a330f4e910211  base/PandaTV.apk' | sha256sum -c -
+      - name: Build new unsigned 2.0.17 APK, preserving existing native player and TV guide
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 panda217/apply_patch217.py --base base/PandaTV.apk --out PandaTV-unsigned.apk
+          unzip -p PandaTV-unsigned.apk assets/pandatv_v291_stability.js > panda_v291.js
+          node --check panda_v291.js
+          unzip -p PandaTV-unsigned.apk assets/panda_nav_cache_v194.js > panda_nav_cache_v194.js
+          node --check panda_nav_cache_v194.js
+          BT="$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/aapt" dump badging PandaTV-unsigned.apk | grep "^package:"
+          "$BT/aapt" dump badging PandaTV-unsigned.apk | grep -q "^package: name='com.pandatv.elitev301.elite204' versionCode='2170' versionName='2.0.17-final'"
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          with ZipFile('base/PandaTV.apk') as a,ZipFile('PandaTV-unsigned.apk') as b:
+              assert b.testzip() is None
+              changed=[]
+              for name in a.namelist():
+                  if name not in b.namelist():continue
+                  if a.read(name)!=b.read(name):
+                      changed.append(name)
+              assert set(changed)=={'AndroidManifest.xml','assets/pandatv.html','assets/pandatv_v291_stability.js'},changed
+              assert b'panda_nav_cache_v194.js' in b.read('assets/pandatv.html')
+              assert b'PandaFamily215' in b.read('assets/panda_family_catalog_v215.js')
+              assert b'panda_compact_guide_v216.js' in b.read('assets/pandatv.html')
+              print('PASS: only expected manifest/startup/navigation assets changed', changed)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: PandaTV-217-Unsigned-QA
+          path: PandaTV-unsigned.apk
+          retention-days: 7
