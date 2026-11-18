@@ -1,0 +1,188 @@
+name: Publish Panda Tv Elite 2.0.18 owner signed Home remote fix
+on:
+  push:
+    branches: [main]
+    paths:
+      - releases/218/publish-trigger.json
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: panda-elite-218-public
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      PANDA_PROD_KEYSTORE_B64: ${{ secrets.PANDA_PROD_KEYSTORE_B64 }}
+      PANDA_PROD_STORE_PASSWORD: ${{ secrets.PANDA_PROD_STORE_PASSWORD }}
+      PANDA_PROD_KEY_ALIAS: ${{ secrets.PANDA_PROD_KEY_ALIAS }}
+      PANDA_PROD_KEY_PASSWORD: ${{ secrets.PANDA_PROD_KEY_PASSWORD }}
+      BASE_TAG: v2.0.17-back-cache-public.1
+      QA_TAG: v2.0.17.1-home-focus-qa.1
+      PUBLIC_TAG: v2.0.18-home-navigation-public.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify owner approval, current feed, reviewed Home code, signing secrets and QA release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for secret in PANDA_PROD_KEYSTORE_B64 PANDA_PROD_STORE_PASSWORD PANDA_PROD_KEY_ALIAS PANDA_PROD_KEY_PASSWORD; do
+            if [ -z "${!secret:-}" ]; then echo "::error::Missing production signing secret: $secret"; exit 1; fi
+          done
+          test -s releases/218/publish-trigger.json
+          python3 - <<'PY'
+          import json
+          p=json.load(open('docs/version.json'))
+          t=json.load(open('releases/218/publish-trigger.json'))
+          assert p['versionCode']==2170 and p['applicationId']=='com.pandatv.elitev301.elite204',p
+          assert p['sha256']=='3a738e68bded1a0ce3b4af0c2b4231b903c9ffc5a78ed0ab0e23f9b43a425aff'
+          assert t['approved_from_test_tag']=='v2.0.17.1-home-focus-qa.1'
+          assert t['public_version_code']==2180 and t['owner_approved_public'] is True
+          PY
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')" = "$BASE_TAG"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$QA_TAG" --jq '.prerelease')" = true
+          if gh release view "$PUBLIC_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo '::error::Public 2.0.18 tag exists already; will not overwrite'
+            exit 1
+          fi
+          python3 -m py_compile releases/218/apply_patch218.py
+          node --check android/home-focus218/panda_home_focus_v218.js
+          node android/home-focus218/test_home_focus_v218.cjs
+      - name: Download exact 2.0.17 production APK and approved 2.0.17.1 QA APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p base approved
+          gh release download "$BASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir base
+          echo '3a738e68bded1a0ce3b4af0c2b4231b903c9ffc5a78ed0ab0e23f9b43a425aff  base/PandaTV.apk' | sha256sum -c -
+          gh release download "$QA_TAG" --repo "$GITHUB_REPOSITORY" --pattern PandaTV-Home-2171-QA.apk --dir approved
+          test -s approved/PandaTV-Home-2171-QA.apk
+      - name: Rebuild 2.0.18 Home-only fix and compare to approved QA
+        run: |
+          set -euo pipefail
+          python3 releases/218/apply_patch218.py --base base/PandaTV.apk --mode production --out PandaTV-unsigned.apk
+          unzip -p PandaTV-unsigned.apk assets/pandatv_v186_nav_recovery.js > nav-new.js
+          unzip -p PandaTV-unsigned.apk assets/panda_home_focus_v218.js > home-new.js
+          node --check nav-new.js
+          node --check home-new.js
+          python3 - <<'PY'
+          import zipfile,hashlib
+          with zipfile.ZipFile('base/PandaTV.apk') as base,zipfile.ZipFile('approved/PandaTV-Home-2171-QA.apk') as qa,zipfile.ZipFile('PandaTV-unsigned.apk') as prod:
+            assert prod.testzip() is None and qa.testzip() is None
+            changes={n for n in base.namelist() if n in prod.namelist() and base.read(n)!=prod.read(n)}
+            assert changes=={'AndroidManifest.xml','assets/pandatv.html','assets/pandatv_v186_nav_recovery.js'},changes
+            added=set(prod.namelist())-set(base.namelist())
+            assert added=={'assets/panda_home_focus_v218.js'},added
+            for n in ['assets/pandatv.html','assets/pandatv_v186_nav_recovery.js','assets/panda_home_focus_v218.js']:
+              assert prod.read(n)==qa.read(n),'Production and user-approved QA behavior differ: '+n
+            for n in base.namelist():
+              if n.endswith(('.dex','.so')):
+                assert hashlib.sha256(base.read(n)).digest()==hashlib.sha256(prod.read(n)).digest(),n
+              if n.startswith('assets/') and n not in changes and n in prod.namelist():
+                assert base.read(n)==prod.read(n),'Unexpected existing asset change: '+n
+            assert b'panda_nav_cache_v194.js' in prod.read('assets/pandatv.html')
+            assert b'panda_compact_guide_v216.js' in prod.read('assets/pandatv.html')
+            assert b'PandaFamily215' in prod.read('assets/panda_family_catalog_v215.js')
+            assert b'PandaCableGuide209' in prod.read('assets/panda_cable_guide_v209.js')
+            assert b'PandaUpdateManager' in prod.read('classes4.dex')
+          print('PASS: 2.0.18 Home navigation matches approved QA; Back, 12h/24h cache, compact guide, movie catalog and all native binaries untouched')
+          PY
+          BT="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          "$BT/aapt" dump badging PandaTV-unsigned.apk > unsigned-badging.txt
+          grep -q "^package: name='com.pandatv.elitev301.elite204' versionCode='2180' versionName='2.0.18-final'" unsigned-badging.txt
+      - name: Sign production APK and verify Android in-place compatibility with both current public and approved QA
+        run: |
+          set -euo pipefail
+          BT="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$BT/apksigner" && test -x "$BT/zipalign" && test -x "$BT/aapt"
+          KEY="$RUNNER_TEMP/panda-owner-218.p12"
+          printf '%s' "$PANDA_PROD_KEYSTORE_B64" | base64 --decode > "$KEY"
+          chmod 600 "$KEY"
+          keytool -list -keystore "$KEY" -storepass "$PANDA_PROD_STORE_PASSWORD" -alias "$PANDA_PROD_KEY_ALIAS" >/dev/null
+          "$BT/zipalign" -f -p 4 PandaTV-unsigned.apk PandaTV-aligned.apk
+          "$BT/apksigner" sign --ks "$KEY" --ks-key-alias "$PANDA_PROD_KEY_ALIAS" --ks-pass env:PANDA_PROD_STORE_PASSWORD --key-pass env:PANDA_PROD_KEY_PASSWORD --out PandaTV.apk PandaTV-aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs PandaTV.apk > signature-218.txt
+          "$BT/apksigner" verify --verbose --print-certs base/PandaTV.apk > signature-217.txt
+          "$BT/apksigner" verify --verbose --print-certs approved/PandaTV-Home-2171-QA.apk > signature-qa.txt
+          "$BT/zipalign" -c -v 4 PandaTV.apk > alignment-218.txt
+          "$BT/aapt" dump badging PandaTV.apk > badging-218.txt
+          grep -q "^package: name='com.pandatv.elitev301.elite204' versionCode='2180' versionName='2.0.18-final'" badging-218.txt
+          for n in 218 217 qa; do
+            sed -n 's/^.*Signer: certificate SHA-256 digest: //p' "signature-$n.txt" | sort -u > "cert-$n.txt"
+            test -s "cert-$n.txt"
+          done
+          diff -u cert-217.txt cert-218.txt
+          diff -u cert-qa.txt cert-218.txt
+          sha256sum PandaTV.apk | tee checksum-218.txt
+          echo 'PASS: 2.0.18 uses original production certificate and Android app ID; in-place update preserves app data'
+      - name: Publish verified 2.0.18 APK as latest official release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > notes.md <<'NOTES'
+          # Panda Tv Elite 2.0.18 — Home Remote Navigation Fix
+          
+          - Fixes Home D-pad focus getting stuck when moving down toward Live TV, Movies and Series.
+          - Down from Home header/hero selects Live TV. Right moves across to Movies, then Series. Up/Down traverse Home tile rows, and OK opens the selection.
+          - Exactly the approved 2.0.17.1 QA Home JS and navigation behavior, verified byte-for-byte against the user-tested preview.
+          - Keeps the previously approved Back-button navigation, 12-hour Live channel/EPG cache and 24-hour Movies/Series caches.
+          - Maintains the 1,500-channel expanded TV guide, English-first Movies, adult filtering, channel/program search and native Media3 playback.
+          - Original native DEX and shared libraries remain byte-for-byte unchanged.
+          
+          **In-place update:** Same Android package and permanent production signing certificate as 2.0.17 and the tested 2.0.17.1 QA. Existing credentials, favorites and cached data are preserved by standard Android upgrade. Android installation approval is required.
+          
+          The owner confirmed that 2.0.17.1 QA works on their device. The production APK is rebuilt from the same source with the release version code, regression-tested and production-signed; it has not been separately device-tested.
+          NOTES
+          gh release create "$PUBLIC_TAG" PandaTV.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest --title 'Panda Tv Elite 2.0.18 — Home Remote Navigation Fix' --notes-file notes.md
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')" = "$PUBLIC_TAG"
+          echo 'PASS: public 2.0.18 release is latest'
+      - name: Point the official auto-update feed at verified production-signed APK
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          path=Path('docs/version.json')
+          data=json.loads(path.read_text())
+          assert data['versionCode']==2170 and data['applicationId']=='com.pandatv.elitev301.elite204'
+          apk=Path('PandaTV.apk')
+          tag='v2.0.18-home-navigation-public.1'
+          data.update({'schema':1,'published':True,'versionName':'2.0.18','versionCode':2180,
+            'applicationId':'com.pandatv.elitev301.elite204',
+            'apkUrl':f'https://github.com/BlankChap232/p/releases/download/{tag}/PandaTV.apk',
+            'sizeBytes':apk.stat().st_size,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
+            'releaseNotesUrl':f'https://github.com/BlankChap232/p/releases/tag/{tag}',
+            'channel':'owner-approved-public-elite','launcherName':'Panda Tv Elite',
+            'installationNote':'Owner-signed in-place update from public 2.0.17 and tested 2.0.17.1 QA; Android installation approval required.',
+            'updatePolicy':'automatic-checks-with-user-approved-installs',
+            'signingNote':'Permanent owner certificate verified against public 2.0.17 and owner-tested QA.'})
+          path.write_text(json.dumps(data,indent=2)+'\n')
+          print('PRODUCTION_SHA256',data['sha256'],'BYTES',data['sizeBytes'])
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/version.json
+          git commit -m 'Publish Panda Tv Elite 2.0.18 signed update feed'
+          git push origin HEAD:main
+      - name: Preserve production release audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PandaTV-218-Production-Audit
+          path: |
+            unsigned-badging.txt
+            signature-218.txt
+            signature-217.txt
+            signature-qa.txt
+            alignment-218.txt
+            badging-218.txt
+            checksum-218.txt
+            notes.md
+          retention-days: 21
+          if-no-files-found: ignore
