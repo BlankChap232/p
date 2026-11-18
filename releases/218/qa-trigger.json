@@ -7,6 +7,6 @@
   "changes": "Home-only remote focus, Live Movies Series quick tiles",
   "signed": "owner production certificate; must match public 2.0.17",
   "publish_latest": false,
-  "build_attempt": 2,
-  "qa_note": "Corrected Home focus test step count; source patch unchanged"
+  "build_attempt": 3,
+  "qa_note": "Both Home focus test count assertions corrected"
 }
