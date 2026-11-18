@@ -1,0 +1,12 @@
+{
+  "release": "Panda Tv Elite 2.0.18 - Home Remote Navigation Fix",
+  "base_tag": "v2.0.17-back-cache-public.1",
+  "approved_from_test_tag": "v2.0.17.1-home-focus-qa.1",
+  "production_tag": "v2.0.18-home-navigation-public.1",
+  "public_version_code": 2180,
+  "package_id": "com.pandatv.elitev301.elite204",
+  "owner_approved_public": true,
+  "owner_test_result": "User confirmed 2.0.17.1 Home navigation test works and requested official publication.",
+  "retain": "Back navigation, 12h Live/EPG cache, 24h Movies/Series cache, native Media3, guide and catalog",
+  "signing": "Existing permanent production certificate only; requires match against 2.0.17 and approved QA"
+}
