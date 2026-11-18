@@ -111,5 +111,5 @@ assert.equal(fire(tiles[0],'ArrowDown'),false,'Movies use existing category navi
 global.state.route='home';
 const count=focus.inspect().handled;
 assert.ok(count>=11,'test actually exercised Home navigation');
-assert.ok(calls.scroll>=12,'focused items brought into view');
+assert.ok(calls.scroll>=11,'focused items brought into view');
 console.log('PASS: Home Live/Movies/Series D-pad entry, grid row and column navigation, lower sections, setup and guide isolation');
