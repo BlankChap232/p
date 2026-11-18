@@ -38,6 +38,13 @@ jobs:
           with ZipFile('base/PandaTV.apk') as z:
             print('ZIP VALID:',z.testzip() is None)
             print('ALL DEX:',[(n,len(z.read(n))) for n in z.namelist() if n.endswith('.dex')])
+            import re
+            for dn in [x for x in z.namelist() if x.endswith('.dex')]:
+              binary=z.read(dn)
+              strings=sorted(set(re.findall(rb'[ -~]{9,}',binary)))
+              for item in strings:
+                if any(q in item.lower() for q in [b'window.',b'javascript:',b'handleback',b'guideback',b'onbackpressed',b'keydown',b'history.']):
+                  print('DEX_BACK',dn,repr(item[:320]))
             print('META:',[(n,len(z.read(n))) for n in z.namelist() if n.endswith('.so')])
             print('JS_ASSETS:',[n for n in z.namelist() if n.startswith('assets/') and n.endswith(('.html','.js'))])
             for path in ['assets/pandatv.html','assets/pandatv_v291_stability.js','assets/panda_family_catalog_v215.js','assets/panda_compact_guide_v216.js','assets/panda_cable_guide_v209.js','assets/pandatv_v1888_guide_nav.js','assets/panda_remote_nav_v207.js']:
