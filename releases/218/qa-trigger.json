@@ -1,0 +1,10 @@
+{
+  "release": "Panda Tv Elite 2.0.17.1 Home D-pad QA",
+  "base_tag": "v2.0.17-back-cache-public.1",
+  "qa_tag": "v2.0.17.1-home-focus-qa.1",
+  "version_code": 2171,
+  "application_id": "com.pandatv.elitev301.elite204",
+  "changes": "Home-only remote focus, Live Movies Series quick tiles",
+  "signed": "owner production certificate; must match public 2.0.17",
+  "publish_latest": false
+}
