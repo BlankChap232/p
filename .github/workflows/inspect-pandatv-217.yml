@@ -40,7 +40,7 @@ jobs:
             print('ALL DEX:',[(n,len(z.read(n))) for n in z.namelist() if n.endswith('.dex')])
             print('META:',[(n,len(z.read(n))) for n in z.namelist() if n.endswith('.so')])
             print('JS_ASSETS:',[n for n in z.namelist() if n.startswith('assets/') and n.endswith(('.html','.js'))])
-            for path in ['assets/pandatv.html','assets/pandatv_v291_stability.js','assets/panda_family_catalog_v215.js','assets/panda_compact_guide_v216.js','assets/panda_cable_guide_v209.js']:
+            for path in ['assets/pandatv.html','assets/pandatv_v291_stability.js','assets/panda_family_catalog_v215.js','assets/panda_compact_guide_v216.js','assets/panda_cable_guide_v209.js','assets/pandatv_v1888_guide_nav.js','assets/panda_remote_nav_v207.js']:
               if path not in z.namelist():
                 print('MISSING:',path)
                 continue
@@ -49,6 +49,10 @@ jobs:
               if path.endswith('pandatv_v291_stability.js'):
                 idx=txt.find('bootChecks++;if(P.syncing||state.syncing)return;')
                 print('BOOT_BLOCK',repr(txt[idx:idx+2000]))
+              if path.endswith('panda_remote_nav_v207.js') or path.endswith('pandatv_v1888_guide_nav.js'):
+                for needle in ['PandaTVNavigation190','PandaRemoteNav207','handleBack','Backspace','Escape','window.go']:
+                  at=txt.find(needle)
+                  print('BACK_MARKER',path,needle,repr(txt[max(0,at-120):at+270]) if at>=0 else 'NOT FOUND')
               if path.endswith('pandatv.html'):
                 idx=txt.find('async function restore()')
                 print('RESTORE_BLOCK',repr(txt[idx:idx+450]))
