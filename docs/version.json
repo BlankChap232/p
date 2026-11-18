@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "published": true,
-  "versionName": "2.0.16",
-  "versionCode": 2160,
+  "versionName": "2.0.17",
+  "versionCode": 2170,
   "applicationId": "com.pandatv.elitev301.elite204",
-  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v2.0.16-full-height-guide-public.1/PandaTV.apk",
-  "sizeBytes": 25574579,
-  "sha256": "53c4a506b6619e598091f26d92f29201c856089471eebff2042a330f4e910211",
-  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v2.0.16-full-height-guide-public.1",
+  "apkUrl": "https://github.com/BlankChap232/p/releases/download/v2.0.17-back-cache-public.1/PandaTV.apk",
+  "sizeBytes": 25582847,
+  "sha256": "3a738e68bded1a0ce3b4af0c2b4231b903c9ffc5a78ed0ab0e23f9b43a425aff",
+  "releaseNotesUrl": "https://github.com/BlankChap232/p/releases/tag/v2.0.17-back-cache-public.1",
   "channel": "owner-approved-public-elite",
   "launcherName": "Panda Tv Elite",
-  "installationNote": "Owner-signed in-place update from public 2.0.15 with Android installation approval.",
+  "installationNote": "Owner signed in place update from official 2.0.16; Android approval required.",
   "updatePolicy": "automatic-checks-with-user-approved-installs",
-  "signingNote": "Permanent owner certificate verified against 2.0.15."
+  "signingNote": "Owner certificate verified against official 2.0.16."
 }
