@@ -1,0 +1,56 @@
+name: Inspect Panda TV 2.0.16 for tested navigation and cache repair
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/inspect-pandatv-217.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download current production release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download v2.0.16-full-height-guide-public.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk
+          echo '53c4a506b6619e598091f26d92f29201c856089471eebff2042a330f4e910211  PandaTV.apk' | sha256sum -c -
+      - name: Inspect compatible code anchors without modifying APK
+        run: |
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          import hashlib
+          keys=['await openDb();await restore();await purgeRetiredGuide181();render();',
+                'bootChecks++;if(P.syncing||state.syncing)return;',
+                'if(hasSource&&!checkpointValid()){',
+                "if(hasSource&&(!read('pandaUSAguideSetup2953',null)||!read('pandaGuideLogoUpgrade2954',false))){P.finishInitialGuide();return}",
+                'PandaTVNavigation190','PandaGuideFocus1888','PandaLivePreview193','PandaFamily215',
+                'PandaCableGuide209','window.autoUpdateIfDue','window.smartSync','PandaUpdateManager',
+                'function restore','async function restore','function openDb','function sync','saveBatch',
+                'panda_nav_cache_v194.js']
+          with ZipFile('PandaTV.apk') as z:
+            print('ZIP VALID:',z.testzip() is None)
+            print('ALL DEX:',[(n,len(z.read(n))) for n in z.namelist() if n.endswith('.dex')])
+            print('META:',[(n,len(z.read(n))) for n in z.namelist() if n.endswith('.so')])
+            print('JS_ASSETS:',[n for n in z.namelist() if n.startswith('assets/') and n.endswith(('.html','.js'))])
+            for path in ['assets/pandatv.html','assets/pandatv_v291_stability.js','assets/panda_family_catalog_v215.js','assets/panda_compact_guide_v216.js','assets/panda_cable_guide_v209.js']:
+              if path not in z.namelist():
+                print('MISSING:',path)
+                continue
+              txt=z.read(path).decode('utf8',errors='replace')
+              print('FILE',path,'SIZE',len(txt),'SHA256',hashlib.sha256(txt.encode()).hexdigest())
+              for k in keys:
+                num=txt.count(k)
+                if num:
+                  idx=txt.find(k)
+                  print('MATCH',repr(k),num,'CONTEXT',repr(txt[max(0,idx-120):idx+len(k)+190]))
+              if path.endswith('pandatv.html'):
+                print('HTML_TAIL',repr(txt[-1650:]))
+            print('MANIFEST com.pandatv.elitev301.elite204 utf16:',z.read('AndroidManifest.xml').count('com.pandatv.elitev301.elite204'.encode('utf-16le')))
+          PY
