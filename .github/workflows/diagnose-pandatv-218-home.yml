@@ -31,6 +31,8 @@ jobs:
               if any(s in n for s in ('remote_nav','guide_nav','nav_recovery','panda_nav_cache','panda_compact_guide','panda_perf_guard','v191_warmup','pandatv.html','panda_safe_setup','panda_smart_guide','cyber_ui','panda_guide_fit')):
                 print('ASSET',n,len(z.read(n)),hashlib.sha256(z.read(n)).hexdigest())
             n='assets/pandatv.html'; t=z.read(n).decode('utf-8')
+            idx=t.find('function home(')
+            print('HOME_TEMPLATE',repr(t[idx:idx+11500]))
             pats=['function go(', 'function go (', 'function renderHome', 'function render(', "route==='home'",'id="nav"','id="main"',"case 'ArrowDown'",'key===\'ArrowDown\'','keydown','requestAnimationFrame', 'focus(', 'nav(\'home\')','pandaHome','window.go']
             for pat in pats:
               ms=list(re.finditer(re.escape(pat),t,re.I))
@@ -42,7 +44,7 @@ jobs:
               if n not in names:continue
               t=z.read(n).decode('utf8')
               print('\nJS_FILE',base,'SIZE',len(t),'SHA',hashlib.sha256(t.encode()).hexdigest())
-              if len(t)<12500:print('JS_ALL',base,repr(t))
+              if len(t)<19000:print('JS_ALL',base,repr(t))
               else:
                 for pat in ['home','ArrowDown','keydown','focus','scroll','preventDefault','MutationObserver','route']:
                   ms=list(re.finditer(re.escape(pat),t,re.I))
