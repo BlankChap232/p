@@ -46,6 +46,12 @@ jobs:
                 continue
               txt=z.read(path).decode('utf8',errors='replace')
               print('FILE',path,'SIZE',len(txt),'SHA256',hashlib.sha256(txt.encode()).hexdigest())
+              if path.endswith('pandatv_v291_stability.js'):
+                idx=txt.find('bootChecks++;if(P.syncing||state.syncing)return;')
+                print('BOOT_BLOCK',repr(txt[idx:idx+2000]))
+              if path.endswith('pandatv.html'):
+                idx=txt.find('async function restore()')
+                print('RESTORE_BLOCK',repr(txt[idx:idx+450]))
               for k in keys:
                 num=txt.count(k)
                 if num:
