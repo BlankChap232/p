@@ -1,0 +1,51 @@
+name: Diagnose Panda TV 2.0.17 Home D-pad focus
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-pandatv-218-home.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    if: github.repository == 'BlankChap232/p'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read exact official APK Home and remote focus code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p base
+          gh release download v2.0.17-back-cache-public.1 --repo "$GITHUB_REPOSITORY" --pattern PandaTV.apk --dir base
+          echo '3a738e68bded1a0ce3b4af0c2b4231b903c9ffc5a78ed0ab0e23f9b43a425aff  base/PandaTV.apk' | sha256sum -c -
+          python3 - <<'PY'
+          import zipfile,re,hashlib
+          with zipfile.ZipFile('base/PandaTV.apk') as z:
+            assert z.testzip() is None
+            names=[x for x in z.namelist() if x.startswith('assets/') and x.endswith(('.html','.js','.css'))]
+            for n in names:
+              if any(s in n for s in ('remote_nav','guide_nav','nav_recovery','panda_nav_cache','panda_compact_guide','panda_perf_guard','v191_warmup','pandatv.html','panda_safe_setup','panda_smart_guide','cyber_ui','panda_guide_fit')):
+                print('ASSET',n,len(z.read(n)),hashlib.sha256(z.read(n)).hexdigest())
+            n='assets/pandatv.html'; t=z.read(n).decode('utf-8')
+            pats=['function go(', 'function go (', 'function renderHome', 'function render(', "route==='home'",'id="nav"','id="main"',"case 'ArrowDown'",'key===\'ArrowDown\'','keydown','requestAnimationFrame', 'focus(', 'nav(\'home\')','pandaHome','window.go']
+            for pat in pats:
+              ms=list(re.finditer(re.escape(pat),t,re.I))
+              for m in ms[:4]:print('HTML',pat,'COUNT',len(ms),'AT',m.start(),repr(t[max(0,m.start()-270):m.start()+1000]))
+            print('HTML_SCRIPT_END',repr(t[-3500:]))
+            targets=['panda_remote_nav_v207.js','pandatv_v186_nav_recovery.js','pandatv_v1888_guide_nav.js','panda_nav_cache_v194.js','panda_compact_guide_v216.js','panda_perf_guard_v206.js']
+            for base in targets:
+              n='assets/'+base
+              if n not in names:continue
+              t=z.read(n).decode('utf8')
+              print('\nJS_FILE',base,'SIZE',len(t),'SHA',hashlib.sha256(t.encode()).hexdigest())
+              if len(t)<12500:print('JS_ALL',base,repr(t))
+              else:
+                for pat in ['home','ArrowDown','keydown','focus','scroll','preventDefault','MutationObserver','route']:
+                  ms=list(re.finditer(re.escape(pat),t,re.I))
+                  for m in ms[:7]:
+                    print('JS_MATCH',base,pat,'COUNT',len(ms),'AT',m.start(),repr(t[max(0,m.start()-270):m.start()+700]))
+          PY
