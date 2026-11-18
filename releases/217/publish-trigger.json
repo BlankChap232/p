@@ -1,0 +1,18 @@
+{
+  "release": "Panda Tv Elite 2.0.17 - Back Navigation and Saved Catalogs",
+  "base_tag": "v2.0.16-full-height-guide-public.1",
+  "target_tag": "v2.0.17-back-cache-public.1",
+  "package_id": "com.pandatv.elitev301.elite204",
+  "version_code": 2170,
+  "source_archive_sha256": "d71febfe08f2d0904a86b3dde12a1561d21ff498fd048aed5c9b6b8b9fb5d5c2",
+  "successful_ci_qa_run": "https://github.com/BlankChap232/p/actions/runs/44222014107",
+  "qa_unsigned_sha256": "e9e4d9e2bba49f90c26d2aac75f973ce9a304e90fd9f6c2210be87151d1d93f3",
+  "owner_approval": "User tested the preview and explicitly requested public release.",
+  "cache": {
+    "live_hours": 12,
+    "epg_hours": 12,
+    "movies_hours": 24,
+    "series_hours": 24
+  },
+  "signing": "Must use exact original production Android package and permanent signing certificate."
+}
